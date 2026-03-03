@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Weave Web — Connexion</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="auth-wrap">
+    <div class="auth-card">
+        <div class="auth-logo">
+            <h1>✦ Word Weave Web</h1>
+            <p>Système intelligent de gestion documentaire</p>
+        </div>
+
+        <div class="err-msg" id="errorMsg"></div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="fg">
+                <label for="email">Adresse email</label>
+                <input type="email" id="email" class="fc" placeholder="vous@exemple.com" required>
+            </div>
+            <div class="fg">
+                <label for="password">Mot de passe</label>
+                <input type="password" id="password" class="fc" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="btn btn-p" id="submitBtn">
+                Se connecter
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            Pas encore de compte ? <a href="/register">Créer un compte</a>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+<script>
+    // Redirect if already logged in
+    if (API.isAuthenticated()) window.location.href = '/dashboard';
+
+    async function handleLogin(e) {
+        e.preventDefault();
+        const btn = $('#submitBtn');
+        btn.disabled = true;
+        btn.textContent = 'Connexion...';
+
+        try {
+            await API.login($('#email').value, $('#password').value);
+            window.location.href = '/dashboard';
+        } catch (err) {
+            showError($('#errorMsg'), err.message);
+            btn.disabled = false;
+            btn.textContent = 'Se connecter';
+        }
+    }
+</script>
+</body>
+</html>

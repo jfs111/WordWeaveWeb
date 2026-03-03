@@ -1,0 +1,170 @@
+# Word Weave Web — Multi-Tenant Graph-RAG System
+
+services:
+  # ── INFRASTRUCTURE ──
+  postgres:
+    image: postgres:15-alpine
+    container_name: graphrag-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - graphrag-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: graphrag-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - graphrag-net
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    container_name: graphrag-qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - graphrag-net
+
+  # ── SERVICE A — Data & Storage ──
+  service-a:
+    build:
+      context: .
+      dockerfile: services/service_a/Dockerfile
+    container_name: graphrag-storage
+    environment:
+      - SERVICE_NAME=service-a-storage
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - EMBEDDING_DIM=384
+      - POSTGRES_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_URL_SYNC=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=${LOG_LEVEL}
+    ports:
+      - "8000:8000"
+    volumes:
+      - document_storage:/app/documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - graphrag-net
+
+  # ── SERVICE B — Intelligence ──
+  service-b:
+    build:
+      context: .
+      dockerfile: services/service_b/Dockerfile
+    container_name: graphrag-intelligence
+    environment:
+      - SERVICE_NAME=service-b-intelligence
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LLM_URL=${LLM_URL}
+      - LLM_MODEL=${LLM_MODEL}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - LOG_LEVEL=${LOG_LEVEL}
+    ports:
+      - "8001:8001"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - graphrag-net
+
+  # ── SERVICE C — Orchestrator + Web UI ──
+  service-c:
+    build:
+      context: .
+      dockerfile: services/service_c/Dockerfile
+    container_name: graphrag-orchestrator
+    environment:
+      - SERVICE_NAME=service-c-orchestrator
+      - STORAGE_SERVICE_URL=http://service-a:8000
+      - INTELLIGENCE_SERVICE_URL=http://service-b:8001
+      - POSTGRES_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_URL_SYNC=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - JWT_EXPIRATION_DAYS=${JWT_EXPIRATION_DAYS}
+      - LLM_URL=${LLM_URL}
+      - LLM_MODEL=${LLM_MODEL}
+      - LOG_LEVEL=${LOG_LEVEL}
+    ports:
+      - "8002:8002"
+    volumes:
+      - document_storage:/app/documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      service-a:
+        condition: service_healthy
+      service-b:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - graphrag-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  document_storage:
+
+networks:
+  graphrag-net:
+    driver: bridge

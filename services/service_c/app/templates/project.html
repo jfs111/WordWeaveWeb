@@ -1,0 +1,1926 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projet — Word Weave Web</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+    <style>
+        /* ── Aurora Boréale — Stepper & Components ── */
+        .stepper {
+            background: #152238;
+            border: 1px solid #243b5c;
+            border-radius: 16px;
+            padding: 24px 16px 16px;
+            margin-bottom: 20px;
+        }
+        .stepper-track {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+        }
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            min-width: 80px;
+            position: relative;
+        }
+        .step-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.95rem;
+            transition: all 0.3s;
+            border: 2px solid #243b5c;
+            background: #0d1a2e;
+            color: #6b8ab0;
+        }
+        .step-circle.active {
+            border-color: #5ce0d8;
+            background: rgba(92,224,216,0.12);
+            color: #5ce0d8;
+            animation: stepPulse 2s ease-in-out infinite;
+        }
+        .step-circle.done {
+            border-color: #34d399;
+            background: rgba(52,211,153,0.12);
+            color: #34d399;
+        }
+        .step-circle.locked {
+            opacity: 0.4;
+        }
+        @keyframes stepPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(92,224,216,0.3); }
+            50% { box-shadow: 0 0 0 8px rgba(92,224,216,0); }
+        }
+        .step-label {
+            margin-top: 6px;
+            font-size: 0.75rem;
+            color: #6b8ab0;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        .step.active-step .step-label { color: #5ce0d8; }
+        .step.done-step .step-label { color: #34d399; }
+        .step-line {
+            flex: 1;
+            height: 2px;
+            background: #243b5c;
+            min-width: 30px;
+            max-width: 80px;
+            margin: 0 4px;
+            margin-bottom: 22px;
+            transition: background 0.3s;
+        }
+        .step-line.done { background: #34d399; }
+        .step-line.active { background: linear-gradient(90deg, #34d399, #5ce0d8); }
+        .step-description {
+            text-align: center;
+            margin-top: 12px;
+            padding: 10px 16px;
+            color: #8babc8;
+            font-size: 0.85rem;
+            background: rgba(92,224,216,0.05);
+            border-radius: 12px;
+            min-height: 20px;
+        }
+        .step-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        .step-content.active { display: block; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .step-header {
+            margin-bottom: 20px;
+        }
+        .step-header h2 {
+            color: #d4e5f7;
+            font-size: 1.15rem;
+            margin: 0 0 6px 0;
+        }
+        .step-header p {
+            color: #6b8ab0;
+            font-size: 0.85rem;
+            margin: 0;
+            line-height: 1.5;
+        }
+        .btn-next-step {
+            background: linear-gradient(135deg, #5ce0d8, #8b5cf6);
+            border: none;
+            border-radius: 12px;
+            padding: 12px 28px;
+            color: white;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-next-step:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(92,224,216,0.4); }
+        .sub-tab-content { display: none; }
+        .sub-tab-content.active { display: block; }
+        .analysis-panel {
+            background: #152238;
+            border: 1px solid #243b5c;
+            border-radius: 12px;
+            padding: 24px;
+            margin-top: 24px;
+        }
+        .analysis-panel h3 {
+            color: #d4e5f7;
+            margin: 0 0 16px 0;
+            font-size: 1.1rem;
+        }
+        .analysis-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .btn-analysis {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-cluster {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        .btn-cluster:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(102,126,234,0.4); }
+        .btn-relations {
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            color: white;
+        }
+        .btn-relations:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(245,87,108,0.4); }
+        .btn-full-analysis {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            color: #152238;
+        }
+        .btn-full-analysis:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(79,172,254,0.4); }
+        .btn-analysis:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        .llm-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            padding: 4px 10px;
+            border-radius: 20px;
+            margin-left: 12px;
+        }
+        .llm-status.connected { background: rgba(52,211,153,0.15); color: #34d399; }
+        .llm-status.disconnected { background: rgba(239,68,68,0.15); color: #ef4444; }
+        .llm-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .llm-dot.on { background: #34d399; }
+        .llm-dot.off { background: #ef4444; }
+
+        /* ── Job Progress ── */
+        .job-progress {
+            background: #0d1a2e;
+            border: 1px solid #243b5c;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 12px;
+            display: none;
+        }
+        .job-progress.active { display: block; }
+        .job-step {
+            color: #8babc8;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+        }
+        .job-bar {
+            height: 6px;
+            background: #243b5c;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .job-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.5s ease;
+        }
+
+        /* ── Stats Cards ── */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .stat-card {
+            background: #0d1a2e;
+            border: 1px solid #243b5c;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #d4e5f7;
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: #6b8ab0;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 4px;
+        }
+        .stat-value.purple { color: #a78bfa; }
+        .stat-value.pink { color: #f472b6; }
+        .stat-value.cyan { color: #22d3ee; }
+
+        /* ── Graph Container ── */
+        .graph-container {
+            background: #0f1923;
+            border: 1px solid #243b5c;
+            border-radius: 12px;
+            margin-top: 24px;
+            overflow: hidden;
+            position: relative;
+            display: none;
+        }
+        .graph-container.visible { display: block; }
+        .graph-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid #243b5c;
+        }
+        .graph-header h3 {
+            color: #d4e5f7;
+            margin: 0;
+            font-size: 1rem;
+        }
+        .graph-controls {
+            display: flex;
+            gap: 8px;
+        }
+        .graph-controls select, .graph-controls button {
+            background: #152238;
+            border: 1px solid #243b5c;
+            color: #d4e5f7;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        #graph-svg {
+            width: 100%;
+            height: 600px;
+        }
+        .graph-tooltip {
+            position: absolute;
+            background: #152238;
+            border: 1px solid #5ce0d8;
+            border-radius: 12px;
+            padding: 12px;
+            color: #d4e5f7;
+            font-size: 0.8rem;
+            pointer-events: none;
+            z-index: 100;
+            max-width: 300px;
+            display: none;
+        }
+        .graph-legend {
+            padding: 12px 20px;
+            border-top: 1px solid #243b5c;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            font-size: 0.75rem;
+            color: #8babc8;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        /* ── Tabs ── */
+        .tab-bar {
+            display: flex;
+            gap: 4px;
+            margin-top: 24px;
+            border-bottom: 2px solid #243b5c;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            background: transparent;
+            border: none;
+            color: #6b8ab0;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            color: #d4e5f7;
+            border-bottom-color: #5ce0d8;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ── Upload Section (from Phase 1.2) ── */
+        .upload-zone {
+            border: 2px dashed #243b5c;
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            transition: all 0.3s;
+            margin-top: 16px;
+        }
+        .upload-zone.drag-over {
+            border-color: #5ce0d8;
+            background: rgba(92,224,216,0.05);
+        }
+        .upload-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 16px;
+        }
+        .btn-upload {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .btn-upload-files {
+            background: #5ce0d8;
+            color: white;
+        }
+        .btn-upload-folder {
+            background: #8b5cf6;
+            color: white;
+        }
+        .upload-progress {
+            margin-top: 16px;
+            display: none;
+        }
+        .upload-progress.active { display: block; }
+        .upload-counters {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            margin-top: 8px;
+            font-size: 0.85rem;
+        }
+        .counter-ok { color: #34d399; }
+        .counter-err { color: #ef4444; }
+        .counter-skip { color: #f59e0b; }
+
+        /* ── Documents List ── */
+        .doc-list {
+            margin-top: 16px;
+        }
+        .doc-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: #0d1a2e;
+            border: 1px solid #1a2d4a;
+            border-radius: 12px;
+            margin-bottom: 6px;
+        }
+        .doc-name {
+            color: #d4e5f7;
+            font-size: 0.85rem;
+            flex: 1;
+        }
+        .doc-meta {
+            display: flex;
+            gap: 12px;
+            font-size: 0.75rem;
+            color: #6b8ab0;
+        }
+        .doc-status {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .doc-status.processed { background: rgba(52,211,153,0.15); color: #34d399; }
+        .doc-status.processing { background: rgba(92,224,216,0.15); color: #5ce0d8; }
+        .doc-status.error { background: rgba(239,68,68,0.15); color: #ef4444; }
+        .doc-status.uploaded { background: rgba(245,158,11,0.15); color: #f59e0b; }
+
+        /* ── Document Reader Panel ── */
+        .doc-reader-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+        }
+        .doc-reader-overlay.active { display: flex; justify-content: center; align-items: center; }
+        .doc-reader {
+            background: #0d1a2e;
+            border: 1px solid #243b5c;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .doc-reader-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid #243b5c;
+        }
+        .doc-reader-header h3 {
+            color: #d4e5f7;
+            margin: 0;
+            font-size: 1rem;
+            flex: 1;
+        }
+        .doc-reader-meta {
+            display: flex;
+            gap: 8px;
+            margin-right: 16px;
+        }
+        .doc-reader-meta span {
+            background: rgba(92,224,216,0.15);
+            color: #5ce0d8;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+        }
+        .doc-reader-close {
+            background: none;
+            border: none;
+            color: #6b8ab0;
+            font-size: 1.3rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+        .doc-reader-close:hover { background: #243b5c; color: #d4e5f7; }
+        .doc-reader-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+            color: #d4e5f7;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            white-space: pre-wrap;
+        }
+        .doc-reader-relations {
+            padding: 12px 20px;
+            border-top: 1px solid #243b5c;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .doc-reader-relations h4 {
+            color: #8babc8;
+            font-size: 0.8rem;
+            margin: 0 0 8px 0;
+        }
+        .rel-tag {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin: 2px;
+            cursor: pointer;
+        }
+
+        /* ── Markdown in chat ── */
+        .chat-answer h1, .chat-answer h2, .chat-answer h3 {
+            color: #d4e5f7;
+            margin: 12px 0 6px 0;
+            font-size: 1rem;
+        }
+        .chat-answer h1 { font-size: 1.1rem; }
+        .chat-answer h2 { font-size: 1rem; }
+        .chat-answer h3 { font-size: 0.95rem; }
+        .chat-answer p { margin: 6px 0; }
+        .chat-answer ul, .chat-answer ol {
+            margin: 6px 0;
+            padding-left: 20px;
+        }
+        .chat-answer li { margin: 3px 0; }
+        .chat-answer table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 10px 0;
+            font-size: 0.82rem;
+        }
+        .chat-answer th, .chat-answer td {
+            border: 1px solid #243b5c;
+            padding: 6px 10px;
+            text-align: left;
+        }
+        .chat-answer th {
+            background: rgba(92,224,216,0.1);
+            color: #93c5fd;
+            font-weight: 600;
+        }
+        .chat-answer td { color: #d4e5f7; }
+        .chat-answer code {
+            background: #1a2d4a;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            color: #93c5fd;
+        }
+        .chat-answer pre {
+            background: #1a2d4a;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+        .chat-answer pre code {
+            background: none;
+            padding: 0;
+        }
+        .chat-answer blockquote {
+            border-left: 3px solid #5ce0d8;
+            padding-left: 12px;
+            margin: 8px 0;
+            color: #8babc8;
+        }
+        .chat-answer strong { color: #d4e5f7; }
+        .chat-answer hr {
+            border: none;
+            border-top: 1px solid #243b5c;
+            margin: 12px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" style="max-width: 1200px; margin: 0 auto; padding: 24px;">
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
+            <div>
+                <a href="/dashboard" style="color:#6b8ab0; text-decoration:none; font-size:0.85rem;">← Tableau de bord</a>
+                <h1 style="color:#d4e5f7; margin:8px 0 0 0; font-size:1.5rem;" id="project-name">✦🕸️ Chargement...</h1>
+                <p style="color:#6b8ab0; font-size:0.85rem; margin-top:4px;" id="project-desc"></p>
+            </div>
+            <div id="llm-badge"></div>
+        </div>
+
+        <!-- Stepper -->
+        <div class="stepper" id="stepper">
+            <div class="stepper-track">
+                <div class="step" data-step="1" onclick="goToStep(1)">
+                    <div class="step-circle" id="step-circle-1">1</div>
+                    <div class="step-label">Upload</div>
+                </div>
+                <div class="step-line" id="step-line-1"></div>
+                <div class="step" data-step="2" onclick="goToStep(2)">
+                    <div class="step-circle" id="step-circle-2">2</div>
+                    <div class="step-label">Clustering</div>
+                </div>
+                <div class="step-line" id="step-line-2"></div>
+                <div class="step" data-step="3" onclick="goToStep(3)">
+                    <div class="step-circle" id="step-circle-3">3</div>
+                    <div class="step-label">Relations</div>
+                </div>
+                <div class="step-line" id="step-line-3"></div>
+                <div class="step" data-step="4" onclick="goToStep(4)">
+                    <div class="step-circle" id="step-circle-4">4</div>
+                    <div class="step-label">Explorer</div>
+                </div>
+            </div>
+            <div class="step-description" id="step-description"></div>
+        </div>
+
+        <!-- Stats (compact) -->
+        <div class="stats-row" id="stats-row">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-docs">0</div>
+                <div class="stat-label">Documents</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-chunks">0</div>
+                <div class="stat-label">Chunks</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value purple" id="stat-clusters">0</div>
+                <div class="stat-label">Clusters</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value pink" id="stat-relations">0</div>
+                <div class="stat-label">Relations</div>
+            </div>
+        </div>
+
+        <!-- Step Contents -->
+
+        <!-- Step 1: Upload -->
+        <div class="step-content active" id="step-1">
+            <div class="step-header">
+                <h2>📄 Étape 1 — Chargez vos documents</h2>
+                <p>Importez vos fichiers PDF. Le système va automatiquement extraire le texte, le découper en chunks et générer les embeddings.</p>
+            </div>
+            <!-- Upload Zone -->
+            <div class="upload-zone" id="upload-zone">
+                <div style="color:#6b8ab0; font-size:0.9rem;">Glissez vos PDFs ici ou utilisez les boutons</div>
+                <div class="upload-buttons">
+                    <button class="btn-upload btn-upload-files" onclick="document.getElementById('file-input').click()">
+                        📄 Sélectionner des fichiers
+                    </button>
+                    <button class="btn-upload btn-upload-folder" onclick="document.getElementById('folder-input').click()">
+                        📁 Sélectionner un dossier entier
+                    </button>
+                </div>
+                <input type="file" id="file-input" accept=".pdf" multiple hidden>
+                <input type="file" id="folder-input" accept=".pdf" webkitdirectory mozdirectory hidden>
+                <div class="upload-progress" id="upload-progress">
+                    <div class="job-bar"><div class="job-bar-fill" id="upload-bar-fill" style="width:0%"></div></div>
+                    <div class="upload-counters">
+                        <span class="counter-ok">✅ <span id="cnt-ok">0</span></span>
+                        <span class="counter-err">❌ <span id="cnt-err">0</span></span>
+                        <span class="counter-skip">⏭️ <span id="cnt-skip">0</span></span>
+                    </div>
+                </div>
+            </div>
+            <div class="doc-list" id="doc-list"></div>
+            <div style="text-align:center; margin-top:20px;">
+                <button class="btn-next-step" onclick="goToStep(2)" id="btn-next-1" style="display:none;">
+                    Étape suivante : Clustering →
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 2: Clustering -->
+        <div class="step-content" id="step-2">
+            <div class="step-header">
+                <h2>🎯 Étape 2 — Clustering automatique</h2>
+                <p>Regroupez vos chunks par thématiques grâce à l'algorithme Auto-K (Silhouette + Elbow + Davies-Bouldin). Aucune configuration nécessaire.</p>
+            </div>
+            <div class="analysis-panel">
+                <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                    <button class="btn-analysis btn-cluster" onclick="runClustering()" id="btn-cluster">
+                        🎯 Lancer le Clustering Auto-K
+                    </button>
+                    <span id="cluster-status" style="color:#6b8ab0; font-size:0.85rem;"></span>
+                </div>
+                <div class="job-progress" id="job-progress-cluster" style="margin-top:16px; display:none;">
+                    <div class="job-step" id="job-step-cluster"></div>
+                    <div class="job-bar"><div class="job-bar-fill" id="job-bar-fill-cluster" style="width:0%"></div></div>
+                </div>
+            </div>
+            <div style="text-align:center; margin-top:20px;">
+                <button class="btn-next-step" onclick="goToStep(3)" id="btn-next-2" style="display:none;">
+                    Étape suivante : Détection de relations →
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 3: Relations -->
+        <div class="step-content" id="step-3">
+            <div class="step-header">
+                <h2>🔗 Étape 3 — Détection de relations par IA</h2>
+                <p>Le LLM analyse les paires de chunks au sein de chaque cluster pour identifier les relations sémantiques (prérequis, complémentaire, similaire, etc.).</p>
+            </div>
+            <div class="analysis-panel">
+                <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                    <button class="btn-analysis btn-relations" onclick="runRelations()" id="btn-relations">
+                        🔗 Détecter les Relations (LLM)
+                    </button>
+                    <span id="llm-badge-step3"></span>
+                    <span id="relations-status" style="color:#6b8ab0; font-size:0.85rem;"></span>
+                </div>
+                <div class="job-progress" id="job-progress-relations" style="margin-top:16px; display:none;">
+                    <div class="job-step" id="job-step-relations"></div>
+                    <div class="job-bar"><div class="job-bar-fill" id="job-bar-fill-relations" style="width:0%"></div></div>
+                </div>
+            </div>
+            <div style="text-align:center; margin-top:20px;">
+                <button class="btn-next-step" onclick="goToStep(4)" id="btn-next-3" style="display:none;">
+                    Étape suivante : Explorer le corpus →
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 4: Explorer (sub-tabs) -->
+        <div class="step-content" id="step-4">
+            <div class="step-header">
+                <h2>🧭 Étape 4 — Explorez votre corpus</h2>
+                <p>Recherchez, chattez avec vos documents ou visualisez le graphe de connaissances.</p>
+            </div>
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="switchSubTab('search', this)">🔍 Recherche</button>
+                <button class="tab-btn" onclick="switchSubTab('chat', this)">💬 Chat RAG</button>
+                <button class="tab-btn" onclick="switchSubTab('graph', this)">🕸️ Graphe</button>
+                <button class="tab-btn" onclick="switchSubTab('analyze', this)">🔬 Analyser un doc</button>
+            </div>
+            <div class="sub-tab-content active" id="subtab-search">
+            <div style="max-width:800px; margin:24px auto;">
+                <div style="position:relative;">
+                    <input type="text" id="search-input" placeholder="Rechercher dans le corpus..."
+                        style="width:100%; padding:14px 50px 14px 18px; background:#0d1a2e; border:1px solid #243b5c; border-radius:10px; color:#d4e5f7; font-size:1rem; outline:none;"
+                        onkeydown="if(event.key==='Enter') runSearch()">
+                    <button onclick="runSearch()"
+                        style="position:absolute; right:8px; top:50%; transform:translateY(-50%); background:#5ce0d8; border:none; border-radius:12px; padding:8px 16px; color:white; cursor:pointer; font-size:0.9rem;">
+                        🔍
+                    </button>
+                </div>
+                <div style="display:flex; gap:12px; margin-top:10px; align-items:center;">
+                    <label style="color:#6b8ab0; font-size:0.8rem;">
+                        <input type="checkbox" id="search-use-graph" checked> Enrichissement graphe
+                    </label>
+                    <label style="color:#6b8ab0; font-size:0.8rem;">
+                        Résultats: <input type="number" id="search-n-results" value="10" min="1" max="50"
+                            style="width:50px; background:#0d1a2e; border:1px solid #243b5c; color:#d4e5f7; border-radius:4px; padding:2px 6px;">
+                    </label>
+                </div>
+                <div id="search-results" style="margin-top:20px;"></div>
+            </div>
+            </div>
+
+            <div class="sub-tab-content" id="subtab-chat">
+            <div style="max-width:800px; margin:24px auto; display:flex; flex-direction:column; height:calc(100vh - 400px); min-height:400px;">
+                <div id="chat-messages" style="flex:1; overflow-y:auto; padding:16px; background:#0f1923; border:1px solid #243b5c; border-radius:12px 12px 0 0;">
+                    <div style="color:#6b8ab0; text-align:center; padding:40px; font-size:0.9rem;">
+                        💬 Posez une question sur votre corpus.<br>
+                        <small>Le système cherche dans les chunks, enrichit avec le graphe de relations, puis répond via LLM.</small>
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; padding:12px; background:#152238; border:1px solid #243b5c; border-top:none; border-radius:0 0 12px 12px;">
+                    <input type="text" id="chat-input" placeholder="Votre question..."
+                        style="flex:1; padding:12px 16px; background:#0d1a2e; border:1px solid #243b5c; border-radius:12px; color:#d4e5f7; font-size:0.95rem; outline:none;"
+                        onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendChat(); }">
+                    <button onclick="sendChat()" id="btn-send-chat"
+                        style="background:linear-gradient(135deg,#5ce0d8,#8b5cf6); border:none; border-radius:12px; padding:12px 20px; color:white; cursor:pointer; font-size:0.95rem; font-weight:600;">
+                        Envoyer
+                    </button>
+                </div>
+                <div style="display:flex; gap:12px; margin-top:8px; align-items:center;">
+                    <label style="color:#6b8ab0; font-size:0.8rem;">
+                        <input type="checkbox" id="chat-use-graph" checked> Enrichissement graphe
+                    </label>
+                    <label style="color:#6b8ab0; font-size:0.8rem;">
+                        Contexte: <input type="number" id="chat-n-context" value="5" min="1" max="20"
+                            style="width:50px; background:#0d1a2e; border:1px solid #243b5c; color:#d4e5f7; border-radius:4px; padding:2px 6px;">
+                        chunks
+                    </label>
+                </div>
+            </div>
+            </div>
+
+            <div class="sub-tab-content" id="subtab-graph">
+            <div class="graph-container visible" id="graph-container">
+                <div class="graph-header">
+                    <h3>🕸️ Graphe de Relations</h3>
+                    <div class="graph-controls">
+                        <select id="graph-filter-type">
+                            <option value="all">Tous les types</option>
+                            <option value="PREREQUIS">Prérequis</option>
+                            <option value="COMPLEMENTAIRE">Complémentaire</option>
+                            <option value="SIMILAIRE">Similaire</option>
+                            <option value="METHODOLOGIQUE">Méthodologique</option>
+                            <option value="APPLICATION">Application</option>
+                            <option value="EXEMPLE">Exemple</option>
+                            <option value="SUITE_LOGIQUE">Suite logique</option>
+                            <option value="TRANSVERSAL">Transversal</option>
+                        </select>
+                        <select id="graph-filter-cluster">
+                            <option value="all">Tous les clusters</option>
+                        </select>
+                        <button onclick="resetGraph()">🔄 Reset</button>
+                    </div>
+                </div>
+                <div style="position:relative;">
+                    <svg id="graph-svg"></svg>
+                    <div class="graph-tooltip" id="graph-tooltip"></div>
+                </div>
+                <div class="graph-legend" id="graph-legend"></div>
+            </div>
+            </div><!-- end subtab-graph -->
+
+            <div class="sub-tab-content" id="subtab-analyze">
+            <div style="max-width:800px; margin:0 auto;">
+                <div style="background:#152238; border:1px solid #243b5c; border-radius:12px; padding:24px;">
+                    <h3 style="color:#d4e5f7; margin:0 0 8px 0;">🔬 Analyser un document contre le corpus</h3>
+                    <p style="color:#6b8ab0; font-size:0.85rem; margin:0 0 20px 0;">
+                        Chargez un PDF — le système va le découper, l'embedder, trouver ses clusters,
+                        détecter les liens avec le corpus existant et générer un rapport détaillé avec justifications.
+                    </p>
+                    <div style="border:2px dashed #243b5c; border-radius:10px; padding:24px; text-align:center;" id="analyze-drop-zone">
+                        <div style="color:#8babc8; font-size:0.9rem; margin-bottom:12px;">📄 Glissez un PDF ici</div>
+                        <button onclick="document.getElementById('analyze-file-input').click()"
+                            style="background:linear-gradient(135deg,#a78bfa,#f472b6); border:none; border-radius:12px; padding:10px 24px; color:white; cursor:pointer; font-size:0.9rem; font-weight:600;">
+                            Sélectionner un fichier
+                        </button>
+                        <input type="file" id="analyze-file-input" accept=".pdf" hidden>
+                        <div id="analyze-filename" style="color:#d4e5f7; font-size:0.85rem; margin-top:12px; display:none;"></div>
+                    </div>
+                    <button id="btn-start-analysis" onclick="startAnalysis()" disabled
+                        style="width:100%; margin-top:16px; background:linear-gradient(135deg,#5ce0d8,#8b5cf6); border:none; border-radius:12px; padding:12px; color:white; cursor:pointer; font-size:1rem; font-weight:600; opacity:0.5;">
+                        🚀 Lancer l'analyse
+                    </button>
+                </div>
+                <div id="analyze-progress" style="display:none; margin-top:16px;">
+                    <div style="background:#152238; border:1px solid #243b5c; border-radius:10px; padding:16px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <span id="analyze-step" style="color:#8babc8; font-size:0.85rem;">Initialisation...</span>
+                            <span id="analyze-pct" style="color:#5ce0d8; font-size:0.85rem; font-weight:600;">0%</span>
+                        </div>
+                        <div style="height:6px; background:#243b5c; border-radius:3px; overflow:hidden;">
+                            <div id="analyze-bar" style="height:100%; background:linear-gradient(90deg,#a78bfa,#f472b6); border-radius:3px; transition:width 0.5s; width:0%;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="analyze-report" style="display:none; margin-top:16px;">
+                    <div style="background:#152238; border:1px solid #243b5c; border-radius:10px; overflow:hidden;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #243b5c;">
+                            <span style="color:#d4e5f7; font-weight:600;">✦🕸️ Rapport d'analyse</span>
+                            <button onclick="downloadReport()" style="background:#5ce0d8; border:none; border-radius:6px; padding:6px 14px; color:white; cursor:pointer; font-size:0.8rem;">
+                                💾 Télécharger .md
+                            </button>
+                        </div>
+                        <div id="analyze-report-body" class="chat-answer" style="padding:20px; color:#d4e5f7; font-size:0.9rem; line-height:1.7; max-height:70vh; overflow-y:auto;"></div>
+                    </div>
+                </div>
+            </div>
+            </div><!-- end subtab-analyze -->
+
+        </div><!-- end step-4 -->
+
+    </div><!-- end container -->
+
+    <!-- Document Reader Overlay -->
+    <div class="doc-reader-overlay" id="doc-reader-overlay" onclick="if(event.target===this) closeReader()">
+        <div class="doc-reader">
+            <div class="doc-reader-header">
+                <h3 id="reader-title">📄 Document</h3>
+                <div class="doc-reader-meta" id="reader-meta"></div>
+                <button id="btn-reformat" onclick="reformatChunk()"
+                    style="background:linear-gradient(135deg,#a78bfa,#f472b6); border:none; border-radius:6px; padding:6px 14px; color:white; cursor:pointer; font-size:0.78rem; font-weight:600; margin-right:8px; display:none;">
+                    ✨ Reformater
+                </button>
+                <button class="doc-reader-close" onclick="closeReader()">✕</button>
+            </div>
+            <div class="doc-reader-body" id="reader-body">Chargement...</div>
+            <div class="doc-reader-relations" id="reader-relations"></div>
+        </div>
+    </div>
+
+    <script>
+        // Extract project ID from URL: /project/{id}
+        const PROJECT_ID = window.location.pathname.split('/project/')[1]?.split('/')[0] || '';
+        const TOKEN = document.cookie.split('access_token=')[1]?.split(';')[0]
+                   || localStorage.getItem('graphrag_token') || '';
+
+        const RELATION_COLORS = {
+            'PREREQUIS': '#ef4444',
+            'COMPLEMENTAIRE': '#5ce0d8',
+            'SIMILAIRE': '#34d399',
+            'METHODOLOGIQUE': '#f59e0b',
+            'APPLICATION': '#8b5cf6',
+            'EXEMPLE': '#ec4899',
+            'SUITE_LOGIQUE': '#06b6d4',
+            'TRANSVERSAL': '#f97316',
+            'AUTRE': '#6b7280'
+        };
+
+        // Cluster color palette (20 distinct colors)
+        const CLUSTER_COLORS = [
+            '#5ce0d8','#ef4444','#34d399','#f59e0b','#8b5cf6',
+            '#ec4899','#06b6d4','#f97316','#84cc16','#a855f7',
+            '#14b8a6','#e11d48','#7c3aed','#059669','#dc2626',
+            '#2563eb','#d946ef','#0891b2','#ca8a04','#4f46e5'
+        ];
+
+        let graphData = null;
+        let simulation = null;
+
+        // ── Headers ──
+        function authHeaders() {
+            return { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json' };
+        }
+
+        // ══════════════════════════
+        // LOAD PROJECT INFO
+        // ══════════════════════════
+        async function loadProjectInfo() {
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}`, { headers: authHeaders() });
+                if (resp.ok) {
+                    const p = await resp.json();
+                    document.getElementById('project-name').textContent = '✦🕸️ ' + (p.name || 'Projet');
+                    document.getElementById('project-desc').textContent = p.description || '';
+                    document.title = p.name + ' — Word Weave Web';
+                }
+            } catch(e) { console.error('Project info error:', e); }
+        }
+
+        // ══════════════════════════
+        // STATS
+        // ══════════════════════════
+        async function loadStats() {
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}/stats`, { headers: authHeaders() });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    document.getElementById('stat-docs').textContent = data.total_documents || 0;
+                    document.getElementById('stat-chunks').textContent = data.total_chunks || 0;
+                    document.getElementById('stat-clusters').textContent = data.total_clusters || 0;
+                    document.getElementById('stat-relations').textContent = data.total_relations || 0;
+                    return data;
+                }
+            } catch(e) { console.error('Stats error:', e); }
+            return { total_documents: 0, total_chunks: 0, total_clusters: 0, total_relations: 0 };
+        }
+
+        // ══════════════════════════
+        // LLM STATUS
+        // ══════════════════════════
+        async function checkLLMStatus() {
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}/llm-status`, { headers: authHeaders() });
+                const data = await resp.json();
+                const badge = document.getElementById('llm-badge');
+                const badge3 = document.getElementById('llm-badge-step3');
+                const html = data.connected
+                    ? `<span class="llm-status connected"><span class="llm-dot on"></span> LLM connecté</span>`
+                    : `<span class="llm-status disconnected"><span class="llm-dot off"></span> LLM déconnecté</span>`;
+                badge.innerHTML = html;
+                if (badge3) badge3.innerHTML = html;
+            } catch(e) {
+                const html = `<span class="llm-status disconnected"><span class="llm-dot off"></span> LLM indisponible</span>`;
+                document.getElementById('llm-badge').innerHTML = html;
+                const b3 = document.getElementById('llm-badge-step3');
+                if (b3) b3.innerHTML = html;
+            }
+        }
+
+        // ══════════════════════════
+        // STEPPER LOGIC
+        // ══════════════════════════
+        let currentStep = 1;
+        const stepDescriptions = {
+            1: "📄 Importez vos fichiers PDF. Le système extrait le texte, découpe en chunks et génère les embeddings automatiquement.",
+            2: "🎯 Regroupez vos chunks par thématiques. L'algorithme Auto-K détecte automatiquement le nombre optimal de clusters.",
+            3: "🔗 L'IA analyse les paires de chunks pour identifier les relations sémantiques (prérequis, complémentaire, similaire...).",
+            4: "🧭 Recherchez, chattez, explorez le graphe ou analysez un nouveau document contre votre corpus.",
+        };
+
+        function getStepState() {
+            const docs = parseInt(document.getElementById('stat-docs').textContent) || 0;
+            const chunks = parseInt(document.getElementById('stat-chunks').textContent) || 0;
+            const clusters = parseInt(document.getElementById('stat-clusters').textContent) || 0;
+            const relations = parseInt(document.getElementById('stat-relations').textContent) || 0;
+            return { docs, chunks, clusters, relations };
+        }
+
+        function updateStepper() {
+            const s = getStepState();
+            const step1Done = s.chunks > 0;
+            const step2Done = s.clusters > 0;
+            const step3Done = s.relations > 0;
+
+            for (let i = 1; i <= 4; i++) {
+                const circle = document.getElementById(`step-circle-${i}`);
+                const step = circle.parentElement;
+                circle.className = 'step-circle';
+                step.className = 'step';
+
+                if (i === 1 && step1Done) { circle.classList.add('done'); circle.innerHTML = '✓'; step.classList.add('done-step'); }
+                else if (i === 2 && step2Done) { circle.classList.add('done'); circle.innerHTML = '✓'; step.classList.add('done-step'); }
+                else if (i === 3 && step3Done) { circle.classList.add('done'); circle.innerHTML = '✓'; step.classList.add('done-step'); }
+                else if (i === currentStep) { circle.classList.add('active'); step.classList.add('active-step'); }
+                else {
+                    let locked = false;
+                    if (i === 2 && !step1Done) locked = true;
+                    if (i === 3 && !step2Done) locked = true;
+                    if (i === 4 && !step1Done) locked = true;
+                    if (locked) circle.classList.add('locked');
+                }
+            }
+
+            for (let i = 1; i <= 3; i++) {
+                const line = document.getElementById(`step-line-${i}`);
+                line.className = 'step-line';
+                if (i === 1 && step1Done) line.classList.add('done');
+                else if (i === 2 && step2Done) line.classList.add('done');
+                else if (i === 3 && step3Done) line.classList.add('done');
+                if (i === currentStep - 1) line.classList.add('active');
+            }
+
+            document.getElementById('step-description').textContent = stepDescriptions[currentStep];
+
+            document.getElementById('btn-next-1').style.display = step1Done ? 'inline-block' : 'none';
+            document.getElementById('btn-next-2').style.display = step2Done ? 'inline-block' : 'none';
+            document.getElementById('btn-next-3').style.display = step3Done ? 'inline-block' : 'none';
+
+            if (step2Done) {
+                const el = document.getElementById('cluster-status');
+                if (el) el.textContent = `✅ ${s.clusters} clusters détectés`;
+            }
+            if (step3Done) {
+                const el = document.getElementById('relations-status');
+                if (el) el.textContent = `✅ ${s.relations} relations détectées`;
+            }
+        }
+
+        function goToStep(n) {
+            const s = getStepState();
+            if (n === 2 && s.chunks === 0) { alert('Uploadez d\'abord des documents (Étape 1)'); return; }
+            if (n === 3 && s.clusters === 0) { alert('Lancez d\'abord le clustering (Étape 2)'); return; }
+            if (n === 4 && s.chunks === 0) { alert('Uploadez d\'abord des documents (Étape 1)'); return; }
+
+            currentStep = n;
+            document.querySelectorAll('.step-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(`step-${n}`).classList.add('active');
+            updateStepper();
+
+            if (n === 4) loadGraph();
+        }
+
+        function switchSubTab(tab, btn) {
+            document.querySelectorAll('#step-4 .tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('#step-4 .sub-tab-content').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById(`subtab-${tab}`).classList.add('active');
+            if (tab === 'graph') loadGraph();
+        }
+
+        function autoDetectStep() {
+            const s = getStepState();
+            if (s.relations > 0) currentStep = 4;
+            else if (s.clusters > 0) currentStep = 3;
+            else if (s.chunks > 0) currentStep = 2;
+            else currentStep = 1;
+
+            document.querySelectorAll('.step-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(`step-${currentStep}`).classList.add('active');
+            updateStepper();
+        }
+
+        // ══════════════════════════
+        // ANALYSIS JOBS
+        // ══════════════════════════
+        let currentJobId = null;
+        let jobPollInterval = null;
+        let currentJobType = null;
+
+        async function runClustering() {
+            currentJobType = 'cluster';
+            await launchJob(`/projects/${PROJECT_ID}/cluster`, 'POST');
+        }
+
+        async function runRelations() {
+            currentJobType = 'relations';
+            await launchJob(`/projects/${PROJECT_ID}/detect-relations`, 'POST');
+        }
+
+        async function launchJob(url, method) {
+            document.querySelectorAll('.btn-analysis').forEach(b => b.disabled = true);
+            const progressId = currentJobType === 'cluster' ? 'job-progress-cluster' : 'job-progress-relations';
+            const progress = document.getElementById(progressId);
+            if (progress) progress.style.display = 'block';
+
+            try {
+                const resp = await fetch(url, { method, headers: authHeaders() });
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.detail || 'Error');
+                }
+                const data = await resp.json();
+                currentJobId = data.job_id;
+
+                if (jobPollInterval) clearInterval(jobPollInterval);
+                jobPollInterval = setInterval(pollJob, 2000);
+            } catch(e) {
+                const stepId = currentJobType === 'cluster' ? 'job-step-cluster' : 'job-step-relations';
+                document.getElementById(stepId).textContent = `❌ Erreur: ${e.message}`;
+                document.querySelectorAll('.btn-analysis').forEach(b => b.disabled = false);
+            }
+        }
+
+        async function pollJob() {
+            if (!currentJobId) return;
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}/jobs`, { headers: authHeaders() });
+                const jobs = await resp.json();
+                const job = jobs.find(j => j.id === currentJobId);
+                if (!job) return;
+
+                const stepId = currentJobType === 'cluster' ? 'job-step-cluster' : 'job-step-relations';
+                const barId = currentJobType === 'cluster' ? 'job-bar-fill-cluster' : 'job-bar-fill-relations';
+
+                document.getElementById(stepId).textContent =
+                    `${job.current_step || '...'} — ${Math.round(job.progress)}%`;
+                document.getElementById(barId).style.width = `${job.progress}%`;
+
+                if (job.status === 'completed') {
+                    clearInterval(jobPollInterval);
+                    document.getElementById(stepId).textContent = '✅ Terminé !';
+                    document.getElementById(barId).style.width = '100%';
+                    document.querySelectorAll('.btn-analysis').forEach(b => b.disabled = false);
+                    await loadStats();
+                    updateStepper();
+                    // Show next button
+                    if (currentJobType === 'cluster') {
+                        document.getElementById('btn-next-2').style.display = 'inline-block';
+                    } else {
+                        document.getElementById('btn-next-3').style.display = 'inline-block';
+                        setTimeout(() => loadGraph(), 1000);
+                    }
+                } else if (job.status === 'failed') {
+                    clearInterval(jobPollInterval);
+                    document.getElementById(stepId).textContent = `❌ Échec: ${job.error_message || 'Erreur inconnue'}`;
+                    document.querySelectorAll('.btn-analysis').forEach(b => b.disabled = false);
+                }
+            } catch(e) { console.error('Poll error:', e); }
+        }
+
+        // ══════════════════════════
+        // DOCUMENTS
+        // ══════════════════════════
+        async function loadDocuments() {
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}/documents`, { headers: authHeaders() });
+                const docs = await resp.json();
+                const list = document.getElementById('doc-list');
+
+                if (docs.length === 0) {
+                    list.innerHTML = '<p style="color:#6b8ab0; text-align:center; padding:20px;">Aucun document. Uploadez des PDFs ci-dessus.</p>';
+                    return;
+                }
+
+                list.innerHTML = docs.map(d => `
+                    <div class="doc-item">
+                        <span class="doc-name">📄 ${d.filename}</span>
+                        <div class="doc-meta">
+                            <span>${d.total_chunks} chunks</span>
+                            <span>${d.file_size_mb} MB</span>
+                            <span class="doc-status ${d.status}">${d.status}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch(e) { console.error('Load docs error:', e); }
+        }
+
+        // ══════════════════════════
+        // UPLOAD
+        // ══════════════════════════
+        const BATCH_SIZE = 5;
+        let uploadOk = 0, uploadErr = 0, uploadSkip = 0;
+
+        document.getElementById('file-input').addEventListener('change', (e) => uploadFiles(Array.from(e.target.files)));
+        document.getElementById('folder-input').addEventListener('change', (e) => uploadFiles(Array.from(e.target.files)));
+
+        // Drag & drop
+        const uploadZone = document.getElementById('upload-zone');
+        uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('drag-over');
+            uploadFiles(Array.from(e.dataTransfer.files));
+        });
+
+        async function uploadFiles(files) {
+            const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+            if (pdfs.length === 0) return;
+
+            uploadOk = 0; uploadErr = 0; uploadSkip = files.length - pdfs.length;
+            document.getElementById('cnt-ok').textContent = uploadOk;
+            document.getElementById('cnt-err').textContent = uploadErr;
+            document.getElementById('cnt-skip').textContent = uploadSkip;
+            document.getElementById('upload-progress').classList.add('active');
+
+            const total = pdfs.length;
+
+            for (let i = 0; i < total; i += BATCH_SIZE) {
+                const batch = pdfs.slice(i, i + BATCH_SIZE);
+                const promises = batch.map(f => uploadSingle(f));
+                await Promise.allSettled(promises);
+
+                const pct = Math.round(((i + batch.length) / total) * 100);
+                document.getElementById('upload-bar-fill').style.width = `${pct}%`;
+            }
+
+            // Done
+            loadDocuments();
+            loadStats();
+        }
+
+        async function uploadSingle(file) {
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const resp = await fetch(`/projects/${PROJECT_ID}/documents/upload`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${TOKEN}` },
+                    body: formData,
+                });
+
+                if (resp.ok) {
+                    uploadOk++;
+                    document.getElementById('cnt-ok').textContent = uploadOk;
+                } else {
+                    uploadErr++;
+                    document.getElementById('cnt-err').textContent = uploadErr;
+                }
+            } catch(e) {
+                uploadErr++;
+                document.getElementById('cnt-err').textContent = uploadErr;
+            }
+        }
+
+        // ══════════════════════════
+        // TABS
+        // ══════════════════════════
+        function switchTab(tab) {
+            const map = { 'documents': 1, 'search': 4, 'chat': 4, 'analyze': 4, 'graph': 4 };
+            goToStep(map[tab] || 1);
+        }
+
+        // ══════════════════════════
+        // D3.js GRAPH
+        // ══════════════════════════
+        async function loadGraph() {
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}/graph`, { headers: authHeaders() });
+                if (!resp.ok) return;
+                graphData = await resp.json();
+
+                if (graphData.total_edges === 0 && graphData.total_nodes === 0) {
+                    document.getElementById('graph-svg').innerHTML =
+                        '<text x="50%" y="50%" text-anchor="middle" fill="#6b8ab0" font-size="14">Aucune donnée. Lancez l\'analyse d\'abord.</text>';
+                    return;
+                }
+
+                // Populate cluster filter
+                const clusterSelect = document.getElementById('graph-filter-cluster');
+                clusterSelect.innerHTML = '<option value="all">Tous les clusters</option>';
+                graphData.clusters.forEach(c => {
+                    clusterSelect.innerHTML += `<option value="${c.cluster_id}">Cluster ${c.cluster_id} (${c.size})</option>`;
+                });
+
+                renderGraph(graphData);
+                renderLegend();
+            } catch(e) { console.error('Graph load error:', e); }
+        }
+
+        function renderGraph(data) {
+            const svg = d3.select('#graph-svg');
+            svg.selectAll('*').remove();
+
+            const width = svg.node().getBoundingClientRect().width || 900;
+            const height = 600;
+
+            svg.attr('viewBox', `0 0 ${width} ${height}`);
+
+            // Filter by type and cluster
+            const typeFilter = document.getElementById('graph-filter-type').value;
+            const clusterFilter = document.getElementById('graph-filter-cluster').value;
+
+            let filteredEdges = data.edges;
+            if (typeFilter !== 'all') {
+                filteredEdges = filteredEdges.filter(e => e.type === typeFilter);
+            }
+
+            // Get node IDs involved in edges
+            const connectedIds = new Set();
+            filteredEdges.forEach(e => { connectedIds.add(e.source?.id || e.source); connectedIds.add(e.target?.id || e.target); });
+
+            let filteredNodes = data.nodes;
+            if (clusterFilter !== 'all') {
+                filteredNodes = filteredNodes.filter(n => n.cluster_id === parseInt(clusterFilter));
+                const nodeIds = new Set(filteredNodes.map(n => n.id));
+                filteredEdges = filteredEdges.filter(e => {
+                    const sid = e.source?.id || e.source;
+                    const tid = e.target?.id || e.target;
+                    return nodeIds.has(sid) && nodeIds.has(tid);
+                });
+            }
+
+            // If too many nodes, only show connected ones
+            if (filteredNodes.length > 200 && filteredEdges.length > 0) {
+                filteredNodes = filteredNodes.filter(n => connectedIds.has(n.id));
+            }
+
+            if (filteredNodes.length === 0) {
+                svg.append('text').attr('x', width/2).attr('y', height/2)
+                   .attr('text-anchor', 'middle').attr('fill', '#6b8ab0')
+                   .text('Aucun nœud pour ce filtre.');
+                return;
+            }
+
+            // Deep copy for D3 simulation
+            const nodes = filteredNodes.map(n => ({...n}));
+            const links = filteredEdges.map(e => ({
+                ...e,
+                source: e.source?.id || e.source,
+                target: e.target?.id || e.target,
+            }));
+
+            // Zoom
+            const g = svg.append('g');
+            svg.call(d3.zoom().scaleExtent([0.1, 5]).on('zoom', (event) => {
+                g.attr('transform', event.transform);
+            }));
+
+            // Simulation
+            if (simulation) simulation.stop();
+            simulation = d3.forceSimulation(nodes)
+                .force('link', d3.forceLink(links).id(d => d.id).distance(80))
+                .force('charge', d3.forceManyBody().strength(-150))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(20));
+
+            // Links
+            const link = g.append('g')
+                .selectAll('line')
+                .data(links)
+                .join('line')
+                .attr('stroke', d => RELATION_COLORS[d.type] || '#6b7280')
+                .attr('stroke-opacity', 0.5)
+                .attr('stroke-width', d => d.intensite === 'FORTE' ? 3 : d.intensite === 'MOYENNE' ? 2 : 1);
+
+            // Nodes
+            const node = g.append('g')
+                .selectAll('circle')
+                .data(nodes)
+                .join('circle')
+                .attr('r', d => 5 + (d.relation_count || 0) * 0.5)
+                .attr('fill', d => CLUSTER_COLORS[d.cluster_id % CLUSTER_COLORS.length] || '#6b7280')
+                .attr('stroke', '#152238')
+                .attr('stroke-width', 1)
+                .style('cursor', 'pointer')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended))
+                .on('mouseover', showTooltip)
+                .on('mouseout', hideTooltip)
+                .on('click', (event, d) => {
+                    event.stopPropagation();
+                    openChunk(d.chromadb_id, d.doc_title, d.cluster_id);
+                });
+
+            simulation.on('tick', () => {
+                link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+                node.attr('cx', d => d.x).attr('cy', d => d.y);
+            });
+
+            function dragstarted(event) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                event.subject.fx = event.subject.x;
+                event.subject.fy = event.subject.y;
+            }
+            function dragged(event) {
+                event.subject.fx = event.x;
+                event.subject.fy = event.y;
+            }
+            function dragended(event) {
+                if (!event.active) simulation.alphaTarget(0);
+                event.subject.fx = null;
+                event.subject.fy = null;
+            }
+        }
+
+        function showTooltip(event, d) {
+            const tooltip = document.getElementById('graph-tooltip');
+            tooltip.innerHTML = `
+                <strong>${d.doc_title || 'Document'}</strong><br>
+                <em>Cluster ${d.cluster_id}</em> · ${d.word_count} mots · ${d.relation_count} relations<br>
+                <small style="color:#8babc8">${d.label}</small>
+            `;
+            tooltip.style.display = 'block';
+            tooltip.style.left = (event.offsetX + 15) + 'px';
+            tooltip.style.top = (event.offsetY - 10) + 'px';
+        }
+
+        function hideTooltip() {
+            document.getElementById('graph-tooltip').style.display = 'none';
+        }
+
+        function renderLegend() {
+            const legend = document.getElementById('graph-legend');
+            legend.innerHTML = Object.entries(RELATION_COLORS).map(([type, color]) =>
+                `<span class="legend-item"><span class="legend-dot" style="background:${color}"></span>${type}</span>`
+            ).join('');
+        }
+
+        function resetGraph() {
+            document.getElementById('graph-filter-type').value = 'all';
+            document.getElementById('graph-filter-cluster').value = 'all';
+            if (graphData) renderGraph(graphData);
+        }
+
+        // Filter events
+        document.getElementById('graph-filter-type').addEventListener('change', () => { if (graphData) renderGraph(graphData); });
+        document.getElementById('graph-filter-cluster').addEventListener('change', () => { if (graphData) renderGraph(graphData); });
+
+        // ══════════════════════════
+        // SEMANTIC SEARCH
+        // ══════════════════════════
+        async function runSearch() {
+            const query = document.getElementById('search-input').value.trim();
+            if (!query) return;
+
+            const nResults = parseInt(document.getElementById('search-n-results').value) || 10;
+            const useGraph = document.getElementById('search-use-graph').checked;
+            const resultsDiv = document.getElementById('search-results');
+            resultsDiv.innerHTML = '<div style="color:#6b8ab0; text-align:center; padding:20px;">🔍 Recherche en cours...</div>';
+
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}/search`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ query, n_results: nResults, use_graph: useGraph }),
+                });
+                if (!resp.ok) throw new Error('Search failed');
+                const data = await resp.json();
+
+                if (data.results.length === 0) {
+                    resultsDiv.innerHTML = '<div style="color:#6b8ab0; text-align:center; padding:20px;">Aucun résultat trouvé.</div>';
+                    return;
+                }
+
+                resultsDiv.innerHTML = `
+                    <div style="color:#6b8ab0; font-size:0.8rem; margin-bottom:12px;">
+                        ${data.total} résultats${data.graph_enriched ? ' (enrichis par le graphe)' : ''}
+                    </div>
+                    ${data.results.map((r, i) => `
+                        <div style="background:#0d1a2e; border:1px solid #243b5c; border-radius:12px; padding:16px; margin-bottom:8px; cursor:pointer; transition:border-color 0.2s;"
+                             onmouseover="this.style.borderColor='#5ce0d8'"
+                             onmouseout="this.style.borderColor='#243b5c'"
+                             onclick="openChunk('${r.chromadb_id}', '${(r.doc_title || 'Document').replace(/'/g, "\\'")}', ${r.cluster_id})">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                <span style="color:#d4e5f7; font-weight:600; font-size:0.9rem;">
+                                    📄 ${r.doc_title || 'Document'}
+                                </span>
+                                <div style="display:flex; gap:8px;">
+                                    ${r.cluster_id !== null ? `<span style="background:rgba(139,92,246,0.15); color:#a78bfa; padding:2px 8px; border-radius:4px; font-size:0.7rem;">Cluster ${r.cluster_id}</span>` : ''}
+                                    <span style="background:rgba(92,224,216,0.15); color:#5ce0d8; padding:2px 8px; border-radius:4px; font-size:0.7rem;">Score: ${(r.score * 100).toFixed(0)}%</span>
+                                </div>
+                            </div>
+                            <div style="color:#8babc8; font-size:0.85rem; line-height:1.5; max-height:120px; overflow:hidden;">
+                                ${r.text.substring(0, 400)}${r.text.length > 400 ? '...' : ''}
+                            </div>
+                            ${r.relations.length > 0 ? `
+                                <div style="margin-top:8px; padding-top:8px; border-top:1px solid #243b5c;">
+                                    <span style="color:#6b8ab0; font-size:0.75rem;">🔗 Relations:</span>
+                                    ${r.relations.slice(0, 3).map(rel => `
+                                        <span style="display:inline-block; background:rgba(52,211,153,0.1); color:#34d399; padding:1px 6px; border-radius:3px; font-size:0.7rem; margin:2px;">
+                                            ${rel.type}
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `).join('')}
+                `;
+            } catch(e) {
+                resultsDiv.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">❌ Erreur: ${e.message}</div>`;
+            }
+        }
+
+        // ══════════════════════════
+        // CHAT GRAPH-RAG
+        // ══════════════════════════
+        let chatHistory = [];
+
+        async function sendChat() {
+            const input = document.getElementById('chat-input');
+            const question = input.value.trim();
+            if (!question) return;
+
+            const nContext = parseInt(document.getElementById('chat-n-context').value) || 5;
+            const useGraph = document.getElementById('chat-use-graph').checked;
+            const messagesDiv = document.getElementById('chat-messages');
+            const sendBtn = document.getElementById('btn-send-chat');
+
+            // Add user message
+            messagesDiv.innerHTML += `
+                <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
+                    <div style="background:#5ce0d8; color:white; padding:10px 16px; border-radius:12px 12px 2px 12px; max-width:70%; font-size:0.9rem;">
+                        ${escapeHtml(question)}
+                    </div>
+                </div>
+            `;
+
+            // Add loading indicator
+            const loadingId = 'loading-' + Date.now();
+            messagesDiv.innerHTML += `
+                <div id="${loadingId}" style="display:flex; margin-bottom:12px;">
+                    <div style="background:#152238; border:1px solid #243b5c; color:#8babc8; padding:10px 16px; border-radius:12px 12px 12px 2px; max-width:80%; font-size:0.9rem;">
+                        ⏳ Recherche dans le corpus + analyse LLM...
+                    </div>
+                </div>
+            `;
+
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            input.value = '';
+            sendBtn.disabled = true;
+
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}/chat`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({
+                        question,
+                        n_context: nContext,
+                        use_graph: useGraph,
+                        temperature: 0.3,
+                    }),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.detail || 'Chat error');
+                }
+                const data = await resp.json();
+
+                // Remove loading
+                document.getElementById(loadingId)?.remove();
+
+                // Add assistant response
+                const sourcesHtml = data.sources.length > 0 ? `
+                    <div style="margin-top:10px; padding-top:8px; border-top:1px solid #243b5c;">
+                        <div style="color:#6b8ab0; font-size:0.75rem; margin-bottom:4px;">
+                            📚 Sources (${data.context_chunks} chunks${data.graph_enriched ? ', enrichi par graphe' : ''}) :
+                        </div>
+                        ${data.sources.slice(0, 5).map(s => `
+                            <div style="color:#8babc8; font-size:0.75rem; padding:3px 0; cursor:pointer; transition:color 0.2s;"
+                                 onmouseover="this.style.color='#5ce0d8'"
+                                 onmouseout="this.style.color='#8babc8'"
+                                 onclick="openChunk('${s.chunk_id}', '${(s.doc_title || 'Document').replace(/'/g, "\\'")}', null)">
+                                📄 ${s.doc_title || 'Document'} <span style="color:#5ce0d8;">(${(s.score * 100).toFixed(0)}%)</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '';
+
+                messagesDiv.innerHTML += `
+                    <div style="display:flex; margin-bottom:12px;">
+                        <div class="chat-answer" style="background:#152238; border:1px solid #243b5c; color:#d4e5f7; padding:12px 16px; border-radius:12px 12px 12px 2px; max-width:80%; font-size:0.9rem; line-height:1.6;">
+                            ${formatAnswer(data.answer)}
+                            ${sourcesHtml}
+                        </div>
+                    </div>
+                `;
+
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+            } catch(e) {
+                document.getElementById(loadingId)?.remove();
+                messagesDiv.innerHTML += `
+                    <div style="display:flex; margin-bottom:12px;">
+                        <div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); color:#ef4444; padding:10px 16px; border-radius:12px; max-width:80%; font-size:0.85rem;">
+                            ❌ ${e.message}
+                        </div>
+                    </div>
+                `;
+            }
+
+            sendBtn.disabled = false;
+            input.focus();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatAnswer(text) {
+            try {
+                marked.setOptions({ breaks: true, gfm: true });
+                return marked.parse(text);
+            } catch(e) {
+                return text.replace(/\n/g, '<br>');
+            }
+        }
+
+        // ══════════════════════════
+        // DOCUMENT READER
+        // ══════════════════════════
+        let currentChunkData = null; // Store for reformat
+        const reformatCache = {};    // Cache formatted texts
+
+        async function openChunk(chromadbId, title, clusterId) {
+            const overlay = document.getElementById('doc-reader-overlay');
+            overlay.classList.add('active');
+            document.getElementById('reader-title').textContent = '📄 ' + (title || 'Chunk');
+            document.getElementById('reader-body').textContent = 'Chargement...';
+            document.getElementById('reader-relations').innerHTML = '';
+            document.getElementById('reader-meta').innerHTML = '';
+            document.getElementById('btn-reformat').style.display = 'none';
+            document.getElementById('btn-reformat').disabled = false;
+            document.getElementById('btn-reformat').textContent = '✨ Reformater';
+            currentChunkData = null;
+
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}/chunks/${chromadbId}`, {
+                    headers: authHeaders(),
+                });
+                if (!resp.ok) throw new Error('Chunk non trouvé');
+                const data = await resp.json();
+                currentChunkData = data;
+
+                // Title
+                document.getElementById('reader-title').textContent = '📄 ' + (data.doc_title || title || 'Document');
+
+                // Meta badges
+                const metaDiv = document.getElementById('reader-meta');
+                metaDiv.innerHTML = '';
+                if (data.cluster_id !== null && data.cluster_id !== undefined) {
+                    metaDiv.innerHTML += `<span style="background:rgba(139,92,246,0.15);color:#a78bfa;">Cluster ${data.cluster_id}</span>`;
+                }
+                if (data.doc_category) {
+                    metaDiv.innerHTML += `<span style="background:rgba(52,211,153,0.15);color:#34d399;">${data.doc_category}</span>`;
+                }
+
+                // Check cache first
+                if (reformatCache[chromadbId]) {
+                    const body = document.getElementById('reader-body');
+                    body.innerHTML = `<div class="chat-answer">${formatAnswer(reformatCache[chromadbId])}</div>`;
+                    body.style.whiteSpace = 'normal';
+                } else {
+                    // Show raw text
+                    document.getElementById('reader-body').textContent = data.text || 'Contenu vide';
+                    // Show reformat button
+                    document.getElementById('btn-reformat').style.display = 'inline-block';
+                }
+
+                // Relations
+                if (data.relations && data.relations.length > 0) {
+                    const relDiv = document.getElementById('reader-relations');
+                    relDiv.innerHTML = `<h4>🔗 ${data.relations.length} relation(s)</h4>` +
+                        data.relations.map(r => `
+                            <span class="rel-tag" style="background:${RELATION_COLORS[r.type] || '#6b7280'}20; color:${RELATION_COLORS[r.type] || '#6b7280'};">
+                                ${r.type} · ${r.intensite || ''}
+                            </span>
+                        `).join('');
+                }
+
+            } catch(e) {
+                document.getElementById('reader-body').textContent = 'Erreur: ' + e.message;
+            }
+        }
+
+        async function reformatChunk() {
+            if (!currentChunkData) return;
+
+            const btn = document.getElementById('btn-reformat');
+            const body = document.getElementById('reader-body');
+            btn.disabled = true;
+            btn.textContent = '⏳ Reformatage...';
+            
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}/reformat`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({
+                        text: currentChunkData.text,
+                        doc_title: currentChunkData.doc_title || '',
+                    }),
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.detail || 'Erreur LLM');
+                }
+
+                const data = await resp.json();
+                
+                // Cache the result
+                reformatCache[currentChunkData.chromadb_id] = data.formatted;
+                
+                // Render as markdown
+                body.innerHTML = `<div class="chat-answer">${formatAnswer(data.formatted)}</div>`;
+                body.style.whiteSpace = 'normal';
+                
+                btn.style.display = 'none';
+
+            } catch(e) {
+                btn.textContent = '❌ Erreur';
+                setTimeout(() => {
+                    btn.textContent = '✨ Reformater';
+                    btn.disabled = false;
+                }, 2000);
+            }
+        }
+
+        function closeReader() {
+            document.getElementById('doc-reader-overlay').classList.remove('active');
+        }
+
+        // Close on Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeReader();
+        });
+
+        // ══════════════════════════
+        // DOCUMENT ANALYSIS
+        // ══════════════════════════
+        let analyzeFile = null;
+        let analyzeJobId = null;
+        let analyzePollInterval = null;
+        let analyzeReportMarkdown = '';
+
+        document.getElementById('analyze-file-input').addEventListener('change', (e) => {
+            analyzeFile = e.target.files[0];
+            if (analyzeFile) {
+                document.getElementById('analyze-filename').textContent = `📄 ${analyzeFile.name} (${(analyzeFile.size/1024/1024).toFixed(2)} MB)`;
+                document.getElementById('analyze-filename').style.display = 'block';
+                const btn = document.getElementById('btn-start-analysis');
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            }
+        });
+
+        // Drag & drop
+        const analyzeZone = document.getElementById('analyze-drop-zone');
+        analyzeZone.addEventListener('dragover', (e) => { e.preventDefault(); analyzeZone.style.borderColor = '#8b5cf6'; });
+        analyzeZone.addEventListener('dragleave', () => { analyzeZone.style.borderColor = '#243b5c'; });
+        analyzeZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            analyzeZone.style.borderColor = '#243b5c';
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.toLowerCase().endsWith('.pdf')) {
+                analyzeFile = file;
+                document.getElementById('analyze-filename').textContent = `📄 ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`;
+                document.getElementById('analyze-filename').style.display = 'block';
+                const btn = document.getElementById('btn-start-analysis');
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            }
+        });
+
+        async function startAnalysis() {
+            if (!analyzeFile) return;
+
+            const btn = document.getElementById('btn-start-analysis');
+            btn.disabled = true;
+            btn.textContent = '⏳ Analyse en cours...';
+            btn.style.opacity = '0.5';
+
+            document.getElementById('analyze-progress').style.display = 'block';
+            document.getElementById('analyze-report').style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('file', analyzeFile);
+
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}/analyze-document`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${TOKEN}` },
+                    body: formData,
+                });
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.detail || 'Erreur');
+                }
+                const data = await resp.json();
+                analyzeJobId = data.job_id;
+
+                // Poll progress
+                if (analyzePollInterval) clearInterval(analyzePollInterval);
+                analyzePollInterval = setInterval(pollAnalysis, 2000);
+
+            } catch(e) {
+                document.getElementById('analyze-step').textContent = `❌ ${e.message}`;
+                btn.textContent = '🚀 Lancer l\'analyse';
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            }
+        }
+
+        async function pollAnalysis() {
+            if (!analyzeJobId) return;
+
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}/jobs`, { headers: authHeaders() });
+                const jobs = await resp.json();
+                const job = jobs.find(j => j.id === analyzeJobId);
+                if (!job) return;
+
+                document.getElementById('analyze-step').textContent = job.current_step || '...';
+                document.getElementById('analyze-pct').textContent = `${Math.round(job.progress)}%`;
+                document.getElementById('analyze-bar').style.width = `${job.progress}%`;
+
+                if (job.status === 'completed') {
+                    clearInterval(analyzePollInterval);
+                    document.getElementById('analyze-step').textContent = '✅ Analyse terminée !';
+                    document.getElementById('analyze-pct').textContent = '100%';
+                    document.getElementById('analyze-bar').style.width = '100%';
+
+                    // Load report
+                    await loadAnalysisReport();
+
+                    const btn = document.getElementById('btn-start-analysis');
+                    btn.textContent = '🚀 Lancer l\'analyse';
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+
+                } else if (job.status === 'failed') {
+                    clearInterval(analyzePollInterval);
+                    document.getElementById('analyze-step').textContent = `❌ ${job.error_message || 'Erreur'}`;
+
+                    const btn = document.getElementById('btn-start-analysis');
+                    btn.textContent = '🚀 Lancer l\'analyse';
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                }
+            } catch(e) {
+                console.error('Poll analysis error:', e);
+            }
+        }
+
+        async function loadAnalysisReport() {
+            try {
+                const resp = await fetch(`/projects/${PROJECT_ID}/analysis-report/${analyzeJobId}`, {
+                    headers: authHeaders(),
+                });
+                const data = await resp.json();
+
+                if (data.report) {
+                    analyzeReportMarkdown = data.report;
+                    document.getElementById('analyze-report').style.display = 'block';
+                    document.getElementById('analyze-report-body').innerHTML = formatAnswer(data.report);
+                }
+            } catch(e) {
+                console.error('Load report error:', e);
+            }
+        }
+
+        function downloadReport() {
+            if (!analyzeReportMarkdown) return;
+            const blob = new Blob([analyzeReportMarkdown], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `rapport-analyse-${analyzeFile ? analyzeFile.name.replace('.pdf', '') : 'document'}.md`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // ══════════════════════════
+        // INIT
+        // ══════════════════════════
+        async function init() {
+            await loadProjectInfo();
+            await loadStats();
+            loadDocuments();
+            checkLLMStatus();
+            autoDetectStep();
+
+            // Auto-refresh stats, documents & stepper every 5 seconds
+            setInterval(async () => {
+                await loadStats();
+                updateStepper();
+                loadDocuments();
+            }, 5000);
+
+            // Refresh LLM status every 30 seconds
+            setInterval(checkLLMStatus, 30000);
+        }
+        init();
+    </script>
+</body>
+</html>

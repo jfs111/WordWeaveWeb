@@ -1,0 +1,42 @@
+# ── Environment & Secrets ──
+.env
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.whl
+.venv/
+venv/
+env/
+
+# ── IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Docker ──
+# Ignore local override (keep docker-compose.yml)
+docker-compose.override.yml
+
+# ── Uploaded documents (runtime data) ──
+documents/
+
+# ── Logs ──
+*.log
+
+# ── Misc ──
+*.bak
+*.tmp

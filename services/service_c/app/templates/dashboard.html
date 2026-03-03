@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Weave Web — Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="app">
+    <!-- Sidebar -->
+    <aside class="side">
+        <div class="side-brand">
+            <h2>✦ Word Weave Web</h2>
+            <small>Multi-Tenant Intelligence</small>
+        </div>
+        <nav class="side-nav">
+            <a class="nav-i active" onclick="showSection('projects')">
+                <span>📁</span> Mes Projets
+            </a>
+            <a class="nav-i" onclick="showSection('account')">
+                <span>👤</span> Mon Compte
+            </a>
+            <a class="nav-i" onclick="showSection('apikeys')">
+                <span>🔑</span> Clés API
+            </a>
+        </nav>
+        <div class="side-foot">
+            <div class="u-info">
+                <div class="u-avatar" id="userAvatar">--</div>
+                <div>
+                    <div class="u-name" id="userName">...</div>
+                    <div class="u-plan" id="userPlan">free</div>
+                </div>
+                <button class="btn-icon" onclick="API.logout()" title="Déconnexion" style="margin-left:auto">⏻</button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- SECTION: Projects -->
+        <section id="sec-projects">
+            <div class="page-h">
+                <div>
+                    <h1>Mes Projets</h1>
+                    <p>Gérez vos bases documentaires intelligentes</p>
+                </div>
+            </div>
+
+            <div class="stats" id="statsGrid">
+                <div class="stat"><div class="stat-l">Projets</div><div class="stat-v c1" id="statProjects">0</div></div>
+                <div class="stat"><div class="stat-l">Documents</div><div class="stat-v c2" id="statDocs">0</div></div>
+                <div class="stat"><div class="stat-l">Chunks</div><div class="stat-v c3" id="statChunks">0</div></div>
+                <div class="stat"><div class="stat-l">Relations</div><div class="stat-v" id="statRelations">0</div></div>
+            </div>
+
+            <div class="p-grid" id="projectsGrid">
+                <div class="loading">Chargement des projets...</div>
+            </div>
+        </section>
+
+        <!-- SECTION: Account -->
+        <section id="sec-account" style="display:none">
+            <div class="page-h">
+                <div>
+                    <h1>Mon Compte</h1>
+                    <p>Gérez vos informations personnelles</p>
+                </div>
+            </div>
+            <div style="max-width:500px">
+                <div class="fg">
+                    <label>Nom</label>
+                    <input type="text" class="fc" id="accName" disabled>
+                </div>
+                <div class="fg">
+                    <label>Email</label>
+                    <input type="email" class="fc" id="accEmail" disabled>
+                </div>
+                <div class="fg">
+                    <label>Plan</label>
+                    <input type="text" class="fc" id="accPlan" disabled>
+                </div>
+                <div class="fg">
+                    <label>Membre depuis</label>
+                    <input type="text" class="fc" id="accCreated" disabled>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: API Keys -->
+        <section id="sec-apikeys" style="display:none">
+            <div class="page-h">
+                <div>
+                    <h1>Clés API</h1>
+                    <p>Connectez des systèmes agentiques externes (LangChain, LlamaIndex, etc.)</p>
+                </div>
+            </div>
+            <div style="max-width:600px">
+                <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:24px;margin-bottom:20px">
+                    <p style="color:var(--t2);font-size:.9em;margin-bottom:16px">
+                        Votre clé API permet aux systèmes externes d'accéder à vos données via l'API REST
+                        <code style="color:var(--accent)">/api/v1/*</code>
+                    </p>
+                    <div class="fg">
+                        <label>Clé API actuelle</label>
+                        <input type="text" class="fc" id="currentApiKey" disabled value="Aucune clé générée" style="font-family:'JetBrains Mono',monospace;font-size:.85em">
+                    </div>
+                    <button class="btn btn-p" style="width:auto" onclick="handleGenApiKey()">
+                        🔑 Générer une nouvelle clé
+                    </button>
+                    <div class="success-msg" id="apiKeyMsg" style="margin-top:12px"></div>
+                </div>
+
+                <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:24px">
+                    <h3 style="margin-bottom:12px;font-size:1em">📖 Utilisation</h3>
+                    <pre style="background:var(--input);padding:16px;border-radius:var(--r);overflow-x:auto;font-size:.82em;font-family:'JetBrains Mono',monospace;color:var(--t2);line-height:1.6"><code>curl -X POST http://localhost:8002/api/v1/search \
+  -H "X-API-Key: gr_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "machine learning", "project_id": "xxx"}'</code></pre>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- Modal: New Project -->
+<div class="modal-bg" id="newProjectModal">
+    <div class="modal">
+        <h2>📁 Nouveau Projet</h2>
+        <div class="err-msg" id="modalError"></div>
+        <form onsubmit="handleCreateProject(event)">
+            <div class="fg">
+                <label>Nom du projet *</label>
+                <input type="text" class="fc" id="projName" placeholder="Ex: Formation RNCP 2024" required minlength="2">
+            </div>
+            <div class="fg">
+                <label>Description</label>
+                <textarea class="fc" id="projDesc" rows="3" placeholder="Description optionnelle..." style="resize:vertical"></textarea>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div class="fg">
+                    <label>Taille chunks (mots)</label>
+                    <input type="number" class="fc" id="projChunkSize" value="1500" min="100" max="5000">
+                </div>
+                <div class="fg">
+                    <label>Overlap (mots)</label>
+                    <input type="number" class="fc" id="projOverlap" value="200" min="0" max="1000">
+                </div>
+            </div>
+            <div class="fg">
+                <label>Seuil similarité (0.1 - 0.99)</label>
+                <input type="number" class="fc" id="projThreshold" value="0.6" min="0.1" max="0.99" step="0.05">
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-s" onclick="closeModal()">Annuler</button>
+                <button type="submit" class="btn btn-p" id="createBtn" style="width:auto">Créer le projet</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+<script>
+    if (!requireAuth()) throw 'redirect';
+
+    let projects = [];
+
+    // Init
+    (async function init() {
+        // User info
+        const u = API.user;
+        if (u) {
+            $('#userAvatar').textContent = initials(u.name);
+            $('#userName').textContent = u.name;
+            $('#userPlan').textContent = u.plan;
+        }
+
+        // Load profile
+        try {
+            const profile = await API.getProfile();
+            $('#accName').value = profile.name;
+            $('#accEmail').value = profile.email;
+            $('#accPlan').value = profile.plan.toUpperCase();
+            $('#accCreated').value = new Date(profile.created_at).toLocaleDateString('fr-FR');
+            if (profile.api_key) {
+                $('#currentApiKey').value = profile.api_key.slice(0, 12) + '••••••••••••';
+            }
+        } catch (e) {}
+
+        // Load projects
+        await loadProjects();
+    })();
+
+    async function loadProjects() {
+        try {
+            projects = await API.getProjects();
+            renderProjects();
+        } catch (e) {
+            $('#projectsGrid').innerHTML = '<div class="empty">Erreur de chargement</div>';
+        }
+    }
+
+    function renderProjects() {
+        const grid = $('#projectsGrid');
+        const totalDocs = projects.reduce((s, p) => s + p.total_documents, 0);
+        const totalChunks = projects.reduce((s, p) => s + p.total_chunks, 0);
+        const totalRels = projects.reduce((s, p) => s + p.total_relations, 0);
+
+        $('#statProjects').textContent = projects.length;
+        $('#statDocs').textContent = totalDocs;
+        $('#statChunks').textContent = totalChunks.toLocaleString();
+        $('#statRelations').textContent = totalRels.toLocaleString();
+
+        let html = '';
+
+        // New project card
+        html += `
+            <div class="p-card p-card-new" onclick="openModal()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                <span>Créer un projet</span>
+            </div>
+        `;
+
+        for (const p of projects) {
+            html += `
+                <div class="p-card" onclick="window.location.href='/project/${p.id}'">
+                    <div class="p-card-h">
+                        <div class="p-card-name">${esc(p.name)}</div>
+                        <span class="p-badge b-${p.status}">${p.status}</span>
+                    </div>
+                    <div class="p-card-desc">${esc(p.description || 'Aucune description')}</div>
+                    <div class="p-card-stats">
+                        <div class="p-card-stat">
+                            <div class="p-card-stat-v">${p.total_documents}</div>
+                            <div class="p-card-stat-l">Documents</div>
+                        </div>
+                        <div class="p-card-stat">
+                            <div class="p-card-stat-v">${p.total_chunks.toLocaleString()}</div>
+                            <div class="p-card-stat-l">Chunks</div>
+                        </div>
+                        <div class="p-card-stat">
+                            <div class="p-card-stat-v">${p.total_relations.toLocaleString()}</div>
+                            <div class="p-card-stat-l">Relations</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        grid.innerHTML = html;
+    }
+
+    function showSection(name) {
+        $$('section').forEach(s => s.style.display = 'none');
+        $(`#sec-${name}`).style.display = 'block';
+        $$('.nav-i').forEach(n => n.classList.remove('active'));
+        event.target.closest('.nav-i').classList.add('active');
+    }
+
+    function openModal() { $('#newProjectModal').classList.add('show'); }
+    function closeModal() { $('#newProjectModal').classList.remove('show'); }
+
+    async function handleCreateProject(e) {
+        e.preventDefault();
+        const btn = $('#createBtn');
+        btn.disabled = true;
+        btn.textContent = 'Création...';
+
+        try {
+            await API.createProject({
+                name: $('#projName').value,
+                description: $('#projDesc').value || null,
+                chunking_size: parseInt($('#projChunkSize').value),
+                chunking_overlap: parseInt($('#projOverlap').value),
+                similarity_threshold: parseFloat($('#projThreshold').value),
+            });
+            closeModal();
+            await loadProjects();
+        } catch (err) {
+            showError($('#modalError'), err.message);
+        }
+        btn.disabled = false;
+        btn.textContent = 'Créer le projet';
+    }
+
+    async function handleGenApiKey() {
+        if (!confirm('Cela invalidera votre clé actuelle. Continuer ?')) return;
+        try {
+            const data = await API.generateApiKey();
+            $('#currentApiKey').value = data.api_key;
+            showSuccess($('#apiKeyMsg'), 'Clé générée ! Copiez-la maintenant.');
+        } catch (err) {
+            alert('Erreur: ' + err.message);
+        }
+    }
+
+    function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s || '';
+        return d.innerHTML;
+    }
+</script>
+</body>
+</html>
