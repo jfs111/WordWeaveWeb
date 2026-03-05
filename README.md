@@ -96,7 +96,7 @@ The system is fully multi-tenant: each user can create multiple projects, each w
 **External REST API (for agents):**
 - 10 endpoints with API key authentication (`X-API-Key`).
 - Chat endpoint with customizable system prompt for agent integration.
-- Graph traversal (BFS, up to 3 hops) for programmatic knowledge exploration.
+- Auto-Hop graph traversal (budget-based best-first) with legacy BFS fallback for programmatic knowledge exploration.
 - Cluster listing, graph data export, chunk retrieval.
 - Compatible with LangChain, LlamaIndex, or any HTTP-based agent framework.
 
@@ -526,6 +526,7 @@ Claude AI assisted in generating significant portions of the codebase. However, 
 - **GPU Acceleration:** Deploy Service B with NVIDIA Container Toolkit for faster embedding generation and larger local LLMs.
 - **Streaming Chat (SSE):** Server-Sent Events for real-time token streaming.
 - **Auto-Hop Visualization:** Interactive path explorer highlighting Auto-Hop traversal paths in the D3.js graph (budget consumption, hop cost per edge).
+- **Vector-Based Relation Qualification:** Replace LLM-based pairwise relation detection with vector operations and clustering on embedding differences, using the LLM only for sampling-based cluster label qualification. This would dramatically reduce LLM calls while maintaining relation quality.
 - **Graph Export Formats:** GraphML, GEXF, and JSON-LD export for integration with Neo4j, Gephi, NetworkX.
 - **Advanced Clustering:** Hierarchical clustering and LLM-generated cluster topic labels.
 - **Prometheus + Grafana:** Observability with metrics dashboards for pipeline performance and LLM latency.
