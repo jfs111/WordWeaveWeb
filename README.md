@@ -65,7 +65,7 @@ The system is fully multi-tenant: each user can create multiple projects, each w
 
 **Semantic Search:**
 - Vector similarity search via Qdrant.
-- Graph enrichment: search results are augmented with related chunks discovered through 1-hop graph traversal.
+- Graph enrichment: search results are augmented with related chunks discovered through Auto-Hop budget-based graph traversal (best-first, cosine similarity cost model).
 
 **Chat Graph-RAG:**
 - Natural language question answering over the document corpus.
@@ -148,7 +148,9 @@ WordWeaveWeb/
 │   └── init.sql                                # Schema PostgreSQL (7 tables, 15 index)
 ├── shared/
 │   ├── config/database.py                      # AsyncSession PostgreSQL
-│   └── models/orm.py                           # SQLAlchemy ORM (7 models)
+│   ├── models/orm.py                           # SQLAlchemy ORM (7 models)
+│   └── utils/
+│       └── auto_hop.py                         # Auto-Hop graph traversal (budget-based best-first)
 ├── services/
 │   ├── service_a/                              # Data & Storage (:8000)
 │   │   ├── Dockerfile
@@ -232,6 +234,9 @@ Each project gets its own Qdrant collection, named `proj_{project_id}`. This ens
 
 ### 7. Background Jobs with Progress Tracking
 Long-running operations (clustering, relation detection, document analysis) run as async background tasks with real-time progress updates stored in the PostgreSQL `jobs` table. The frontend polls job status every few seconds, providing users with step-by-step feedback rather than a blank loading screen.
+
+### 8. Auto-Hop — Budget-Based Graph Traversal
+Traditional graph traversal uses a fixed number of hops (e.g., 1-hop or 2-hop BFS), which is either too shallow (missing deep connections) or too broad (adding noise). The Auto-Hop algorithm solves this with a budget model: each traversal starts with a budget of 1.0, and each hop costs `1 - cosine_similarity`. High-quality paths (similarity > 0.8) can reach 5+ hops deep, while weak paths stop after 1-2 hops. This produces an adaptive exploration depth that matches the actual structure of the knowledge graph — no configuration needed from the user. The cosine similarity metric was chosen over LLM confidence to future-proof the system for a planned evolution toward fully vector-based relation qualification.
 
 ---
 
@@ -394,7 +399,7 @@ All endpoints require `X-API-Key: gr_...` header (generated from Dashboard > API
 | `/api/v1/projects/{id}/graph` | GET | Full graph data (nodes + edges) |
 | `/api/v1/search` | POST | Semantic search with graph enrichment |
 | `/api/v1/chat` | POST | Chat Graph-RAG with customizable system prompt |
-| `/api/v1/graph/neighbors` | POST | BFS graph traversal (1-3 hops) |
+| `/api/v1/graph/neighbors` | POST | Auto-Hop graph traversal (budget-based best-first) or fixed BFS |
 
 ### Example: Chat with your corpus
 ```bash
@@ -410,7 +415,7 @@ curl -X POST http://localhost:8002/api/v1/chat \
   }'
 ```
 
-### Example: Graph traversal
+### Example: Graph traversal (Auto-Hop)
 ```bash
 curl -X POST http://localhost:8002/api/v1/graph/neighbors \
   -H "X-API-Key: gr_your_key_here" \
@@ -418,7 +423,9 @@ curl -X POST http://localhost:8002/api/v1/graph/neighbors \
   -d '{
     "chunk_id": "abc123-...",
     "project_id": "daa20e05-...",
-    "max_hops": 2
+    "budget": 1.0,
+    "max_hops": 10,
+    "mode": "auto"
   }'
 ```
 
@@ -453,6 +460,17 @@ curl -X POST http://localhost:8002/api/v1/graph/neighbors \
 
 Each relation has: intensity (FAIBLE/MOYENNE/FORTE), confidence (0-1), cosine similarity, LLM justification.
 
+### Auto-Hop Graph Traversal
+Instead of a fixed number of hops, the Auto-Hop algorithm uses a **budget-based best-first** strategy to adaptively explore the knowledge graph.
+
+- **Budget model**: Starting budget of 1.0. Each hop costs `1 - cosine_similarity`. A high-similarity relation (0.95) costs only 0.05, enabling deep traversal. A low-similarity relation (0.30) costs 0.70, stopping early.
+- **Strategy**: Best-first (greedy) — always pick the most similar unvisited neighbor.
+- **Deduplication**: visited set ensures each node is explored only once.
+- **Safety**: hard `max_hops` limit (default 10) prevents runaway traversal.
+- **Dual mode**: The API supports both `"auto"` (budget-based) and `"fixed"` (legacy BFS) modes.
+
+Typical behavior on the RNCP corpus (263 PDFs, 3,499 relations): 3-4 hops per starting chunk, budget consumption of 0.75-0.95, traversing COMPLEMENTAIRE, SIMILAIRE, APPLICATION, TRANSVERSAL, and PREREQUIS relations. The Chat RAG pipeline runs Auto-Hop from each vector search result, typically producing 7 vector + 15 graph = 22 context chunks.
+
 ---
 
 ## Database
@@ -483,7 +501,7 @@ Each relation has: intensity (FAIBLE/MOYENNE/FORTE), confidence (0-1), cosine si
 ## Challenges Encountered
 
 ### 1. Validating the Graph-RAG Concept
-The initial question was whether LLM-detected relations would actually improve retrieval quality over pure vector search. A proof of concept using the RNCP corpus compared standard RAG (top-5 vector search) with Graph-RAG (top-5 + 1-hop graph neighbors). The graph-enriched approach consistently surfaced relevant context that vector search alone missed, particularly for questions spanning multiple topics. This validated the core architecture.
+The initial question was whether LLM-detected relations would actually improve retrieval quality over pure vector search. A proof of concept using the RNCP corpus compared standard RAG (top-5 vector search) with Graph-RAG (top-5 + Auto-Hop graph neighbors). The graph-enriched approach consistently surfaced relevant context that vector search alone missed, particularly for questions spanning multiple topics. With the Auto-Hop algorithm (budget-based best-first traversal using cosine similarity as cost), the system adaptively explores 2-5 hops deep when relations are strong, while stopping early on weak connections — producing richer context without noise. This validated the core architecture.
 
 ### 2. Scaling LLM Relation Detection
 With 1,205 chunks, naive pairwise comparison would require ~725,000 LLM calls — completely impractical. The solution was to first cluster chunks into thematic groups, only compare within clusters, use embedding similarity as a pre-filter (cosine ≥ 0.6), and implement incremental commits. This reduced LLM calls from ~725K to ~4,500 while maintaining coverage of meaningful relations.
@@ -507,7 +525,7 @@ Claude AI assisted in generating significant portions of the codebase. However, 
 - **Agent Framework Integration:** LangGraph agents for autonomous multi-step research across the knowledge graph.
 - **GPU Acceleration:** Deploy Service B with NVIDIA Container Toolkit for faster embedding generation and larger local LLMs.
 - **Streaming Chat (SSE):** Server-Sent Events for real-time token streaming.
-- **Multi-Hop Graph Visualization:** Interactive path explorer highlighting traversal paths between chunks.
+- **Auto-Hop Visualization:** Interactive path explorer highlighting Auto-Hop traversal paths in the D3.js graph (budget consumption, hop cost per edge).
 - **Graph Export Formats:** GraphML, GEXF, and JSON-LD export for integration with Neo4j, Gephi, NetworkX.
 - **Advanced Clustering:** Hierarchical clustering and LLM-generated cluster topic labels.
 - **Prometheus + Grafana:** Observability with metrics dashboards for pipeline performance and LLM latency.
