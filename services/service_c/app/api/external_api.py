@@ -62,7 +62,10 @@ class GraphNeighborsRequest(BaseModel):
     chunk_id: str
     project_id: str
     relation_types: Optional[List[str]] = None
-    max_hops: int = Field(default=1, ge=1, le=3)
+    max_hops: int = Field(default=10, ge=1, le=20)
+    budget: float = Field(default=1.0, ge=0.1, le=5.0)
+    min_similarity: float = Field(default=0.1, ge=0.0, le=1.0)
+    mode: str = Field(default="auto", pattern="^(auto|fixed)$")  # "auto" = budget-based, "fixed" = legacy BFS
 
 
 # ── Endpoints ──
@@ -445,8 +448,13 @@ async def get_graph_neighbors(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Graph traversal: get neighbors of a chunk up to N hops.
-    For agentic graph navigation and context expansion.
+    Graph traversal: get neighbors of a chunk.
+
+    Two modes:
+    - "auto" (default): Budget-based best-first traversal using cosine similarity.
+      High-similarity relations cost less, allowing deeper traversal.
+      Budget starts at 1.0, each hop costs (1 - cosine_similarity).
+    - "fixed": Legacy BFS traversal up to max_hops (ignores budget).
     """
     # Verify project access
     result = await db.execute(
@@ -477,70 +485,113 @@ async def get_graph_neighbors(
     if not start_chunk:
         raise HTTPException(status_code=404, detail="Chunk not found")
 
-    # BFS traversal up to max_hops
-    visited = set()
-    visited.add(str(start_chunk.id))
-    current_frontier = {str(start_chunk.id)}
-    all_relations = []
-    neighbor_chunks = []
+    start_id = str(start_chunk.id)
 
-    for hop in range(request.max_hops):
-        if not current_frontier:
-            break
+    if request.mode == "auto":
+        # ── Auto-Hop: budget-based best-first traversal ──
+        from shared.utils.auto_hop import auto_hop_traversal
 
-        next_frontier = set()
-        for chunk_id in current_frontier:
-            # Get relations for this chunk
-            query = select(Relation).where(
-                (Relation.chunk_a_id == chunk_id) | (Relation.chunk_b_id == chunk_id)
-            )
-            if request.relation_types:
-                query = query.where(Relation.type.in_(request.relation_types))
+        hop_result = await auto_hop_traversal(
+            db=db,
+            start_chunk_id=start_id,
+            project_id=request.project_id,
+            budget=request.budget,
+            max_hops=request.max_hops,
+            min_similarity=request.min_similarity,
+            relation_types=request.relation_types,
+        )
 
-            rels_result = await db.execute(query)
-            for r in rels_result.scalars().all():
-                neighbor_id = str(r.chunk_b_id) if str(r.chunk_a_id) == chunk_id else str(r.chunk_a_id)
+        return {
+            "start_chunk_id": hop_result.start_chunk_id,
+            "mode": "auto",
+            "neighbors": [
+                {
+                    "chunk_id": n.chunk_id,
+                    "chromadb_id": n.chromadb_id,
+                    "cluster_id": n.cluster_id,
+                    "doc_title": n.doc_title,
+                    "hop": n.hop,
+                    "budget_remaining": round(n.budget_remaining, 4),
+                    "relation_type": n.relation_type,
+                    "relation_similarity": round(n.relation_similarity, 4),
+                    "relation_justification": n.relation_justification,
+                }
+                for n in hop_result.neighbors
+            ],
+            "total_neighbors": len(hop_result.neighbors),
+            "total_hops": hop_result.total_hops,
+            "budget_initial": hop_result.budget_initial,
+            "budget_used": round(hop_result.budget_used, 4),
+            "stopped_reason": hop_result.stopped_reason,
+            "max_hops": hop_result.max_hops,
+        }
 
-                all_relations.append({
-                    "id": str(r.id),
-                    "source": str(r.chunk_a_id),
-                    "target": str(r.chunk_b_id),
-                    "type": r.type,
-                    "intensite": r.intensite,
-                    "confiance": r.confiance,
-                    "justification": r.justification,
-                    "hop": hop + 1,
-                })
+    else:
+        # ── Fixed mode: legacy BFS traversal ──
+        visited = set()
+        visited.add(start_id)
+        current_frontier = {start_id}
+        all_relations = []
+        neighbor_chunks = []
 
-                if neighbor_id not in visited:
-                    visited.add(neighbor_id)
-                    next_frontier.add(neighbor_id)
+        for hop in range(request.max_hops):
+            if not current_frontier:
+                break
 
-                    # Fetch neighbor chunk info
-                    n_result = await db.execute(select(Chunk).where(Chunk.id == neighbor_id))
-                    n_chunk = n_result.scalar_one_or_none()
-                    if n_chunk:
-                        doc_result = await db.execute(select(Document).where(Document.id == n_chunk.document_id))
-                        doc = doc_result.scalar_one_or_none()
-                        neighbor_chunks.append({
-                            "chunk_id": str(n_chunk.id),
-                            "chromadb_id": n_chunk.chromadb_id,
-                            "cluster_id": n_chunk.cluster_id,
-                            "doc_title": doc.title if doc else "",
-                            "doc_category": doc.category if doc else "",
-                            "hop": hop + 1,
-                        })
+            next_frontier = set()
+            for chunk_id in current_frontier:
+                # Get relations for this chunk
+                query = select(Relation).where(
+                    (Relation.chunk_a_id == chunk_id) | (Relation.chunk_b_id == chunk_id)
+                )
+                if request.relation_types:
+                    query = query.where(Relation.type.in_(request.relation_types))
 
-        current_frontier = next_frontier
+                rels_result = await db.execute(query)
+                for r in rels_result.scalars().all():
+                    neighbor_id = str(r.chunk_b_id) if str(r.chunk_a_id) == chunk_id else str(r.chunk_a_id)
 
-    return {
-        "start_chunk_id": str(start_chunk.id),
-        "neighbors": neighbor_chunks,
-        "relations": all_relations,
-        "total_neighbors": len(neighbor_chunks),
-        "total_relations": len(all_relations),
-        "max_hops": request.max_hops,
-    }
+                    all_relations.append({
+                        "id": str(r.id),
+                        "source": str(r.chunk_a_id),
+                        "target": str(r.chunk_b_id),
+                        "type": r.type,
+                        "intensite": r.intensite,
+                        "confiance": r.confiance,
+                        "justification": r.justification,
+                        "hop": hop + 1,
+                    })
+
+                    if neighbor_id not in visited:
+                        visited.add(neighbor_id)
+                        next_frontier.add(neighbor_id)
+
+                        # Fetch neighbor chunk info
+                        n_result = await db.execute(select(Chunk).where(Chunk.id == neighbor_id))
+                        n_chunk = n_result.scalar_one_or_none()
+                        if n_chunk:
+                            doc_result = await db.execute(select(Document).where(Document.id == n_chunk.document_id))
+                            doc = doc_result.scalar_one_or_none()
+                            neighbor_chunks.append({
+                                "chunk_id": str(n_chunk.id),
+                                "chromadb_id": n_chunk.chromadb_id,
+                                "cluster_id": n_chunk.cluster_id,
+                                "doc_title": doc.title if doc else "",
+                                "doc_category": doc.category if doc else "",
+                                "hop": hop + 1,
+                            })
+
+            current_frontier = next_frontier
+
+        return {
+            "start_chunk_id": start_id,
+            "mode": "fixed",
+            "neighbors": neighbor_chunks,
+            "relations": all_relations,
+            "total_neighbors": len(neighbor_chunks),
+            "total_relations": len(all_relations),
+            "max_hops": request.max_hops,
+        }
 
 
 # ══════════════════════════════════════

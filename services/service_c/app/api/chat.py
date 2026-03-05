@@ -31,7 +31,8 @@ class SearchQuery(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     n_results: int = Field(default=10, ge=1, le=50)
     use_graph: bool = True  # Enrich with graph relations
-    max_hops: int = Field(default=1, ge=0, le=2)
+    max_hops: int = Field(default=10, ge=0, le=20)
+    budget: float = Field(default=1.0, ge=0.0, le=5.0)  # Auto-hop budget (0 = disabled)
 
 
 class SearchResultItem(BaseModel):
@@ -56,7 +57,8 @@ class ChatQuery(BaseModel):
     question: str = Field(min_length=1, max_length=5000)
     n_context: int = Field(default=5, ge=1, le=20)
     use_graph: bool = True
-    max_hops: int = Field(default=1, ge=0, le=2)
+    max_hops: int = Field(default=10, ge=0, le=20)
+    budget: float = Field(default=1.0, ge=0.0, le=5.0)  # Auto-hop budget (0 = disabled)
     temperature: float = Field(default=0.3, ge=0.0, le=1.0)
 
 
@@ -267,29 +269,25 @@ async def chat_graphrag(
                 "text_preview": text[:200],
             })
 
-            # Graph: fetch related chunks (1-hop neighbors)
-            if request.use_graph and chunk:
-                rels_result = await db.execute(
-                    select(Relation).where(
-                        (Relation.chunk_a_id == chunk.id) | (Relation.chunk_b_id == chunk.id),
-                        Relation.confiance >= 0.6,
-                    ).order_by(Relation.confiance.desc()).limit(3)
-                )
-                rels = rels_result.scalars().all()
+            # Graph: auto-hop enrichment — follow best-similarity path within budget
+            if request.use_graph and chunk and request.budget > 0:
+                from shared.utils.auto_hop import auto_hop_traversal
 
-                for r in rels:
-                    # Get the connected chunk
-                    neighbor_id = r.chunk_b_id if str(r.chunk_a_id) == str(chunk.id) else r.chunk_a_id
-                    neighbor_result = await db.execute(
-                        select(Chunk).where(Chunk.id == neighbor_id)
-                    )
-                    neighbor = neighbor_result.scalar_one_or_none()
-                    if neighbor and neighbor.chromadb_id:
-                        # Fetch full text from ChromaDB
+                hop_result = await auto_hop_traversal(
+                    db=db,
+                    start_chunk_id=str(chunk.id),
+                    project_id=project_id,
+                    budget=request.budget,
+                    max_hops=request.max_hops,
+                    min_similarity=0.1,
+                )
+
+                for n in hop_result.neighbors:
+                    if n.chromadb_id:
                         try:
                             async with httpx.AsyncClient(timeout=60) as client:
                                 chunk_resp = await client.get(
-                                    f"{STORAGE_URL}/storage/projects/{current_user.id}/{project_id}/chunks/{neighbor.chromadb_id}"
+                                    f"{STORAGE_URL}/storage/projects/{current_user.id}/{project_id}/chunks/{n.chromadb_id}"
                                 )
                                 if chunk_resp.status_code == 200:
                                     neighbor_data = chunk_resp.json()
@@ -297,18 +295,13 @@ async def chat_graphrag(
                                     if neighbor_text and neighbor_text not in seen_texts:
                                         # Add as graph-enriched context
                                         graph_chunks.append(
-                                                                f"[Relation {r.type} — {r.justification or ''}]\n{neighbor_text}"
+                                                                f"[Relation {n.relation_type} — hop {n.hop} — sim {n.relation_similarity:.2f}]\n{neighbor_text}"
                                                             )
                                         seen_texts.add(neighbor_text)
-                                        # Also add to sources for accurate count in UI
-                                        n_doc_result = await db.execute(
-                                            select(Document).where(Document.id == neighbor.document_id)
-                                        )
-                                        n_doc = n_doc_result.scalar_one_or_none()
                                         sources.append({
-                                            "chunk_id": neighbor.chromadb_id,
-                                            "doc_title": n_doc.title if n_doc else "",
-                                            "score": r.confiance,
+                                            "chunk_id": n.chromadb_id,
+                                            "doc_title": n.doc_title,
+                                            "score": n.relation_similarity,
                                             "text_preview": neighbor_text[:200],
                                         })
 
@@ -334,7 +327,7 @@ CONTEXTE (extraits du corpus "{project.name}"):
 
     try:
         from openai import OpenAI
-        llm_client = OpenAI(base_url=LLM_URL, api_key="lm-studio")
+        llm_client = OpenAI(base_url=LLM_URL, api_key="lm-studio", timeout=180)
 
         response = llm_client.chat.completions.create(
             model=LLM_MODEL,
@@ -490,7 +483,7 @@ TEXTE BRUT :
 
     try:
         from openai import OpenAI
-        llm_client = OpenAI(base_url=LLM_URL, api_key="lm-studio")
+        llm_client = OpenAI(base_url=LLM_URL, api_key="lm-studio", timeout=180)
 
         response = llm_client.chat.completions.create(
             model=LLM_MODEL,

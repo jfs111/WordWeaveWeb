@@ -13,6 +13,9 @@ from app.api.analysis import router as analysis_router
 from app.api.chat import router as chat_router
 from app.api.doc_analysis import router as doc_analysis_router
 
+import logging
+logging.basicConfig(level=logging.INFO)
+
 app = FastAPI(title="Graph-RAG Orchestrator", version="3.0.0")
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
