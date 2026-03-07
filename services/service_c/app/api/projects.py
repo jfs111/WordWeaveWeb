@@ -17,7 +17,7 @@ logger = logging.getLogger("service-c.projects")
 
 # Plan quotas
 PLAN_QUOTAS = {
-    "free":       {"max_projects": 3,   "max_documents": 100,  "max_storage_mb": 500},
+    "free":       {"max_projects": 10,   "max_documents": 1000,  "max_storage_mb": 5000},
     "pro":        {"max_projects": 20,  "max_documents": 5000, "max_storage_mb": 50000},
     "enterprise": {"max_projects": 999, "max_documents": 99999, "max_storage_mb": 999999},
 }

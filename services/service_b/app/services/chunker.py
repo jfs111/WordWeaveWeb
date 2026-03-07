@@ -13,7 +13,7 @@ class TextChunker:
     Adapted from POC: RNCPPipeline.create_chunks()
     """
 
-    def __init__(self, chunk_size: int = 1500, chunk_overlap: int = 200, min_chunk_words: int = 100):
+    def __init__(self, chunk_size: int = 1500, chunk_overlap: int = 200, min_chunk_words: int = 10):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.min_chunk_words = min_chunk_words
@@ -24,6 +24,24 @@ class TextChunker:
         Returns list of chunk dicts with text, positions, context.
         """
         words = text.split()
+
+        # If text is too short for even one chunk, return it as a single chunk
+        if len(words) < self.chunk_size and len(words) >= self.min_chunk_words:
+            chunk_id = f"{doc_id}_chunk_0"
+            chunk_text = " ".join(words)
+            return [{
+                "chunk_id": chunk_id,
+                "text": chunk_text,
+                "char_start": 0,
+                "char_end": len(chunk_text),
+                "word_count": len(words),
+                "position": 0,
+                "context_before": "",
+                "context_after": "",
+                "doc_id": doc_id,
+                "metadata": metadata,
+            }]
+
         chunks = []
         step = self.chunk_size - self.chunk_overlap
 

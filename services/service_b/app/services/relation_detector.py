@@ -21,7 +21,7 @@ class RelationDetector:
     """
     Detects semantic relations between chunks using LLM.
     Adapted from POC: RNCPRelationDetector
-    
+
     Pipeline per cluster:
       1. Get all chunks + embeddings in cluster
       2. Pre-filter pairs by cosine similarity >= threshold
@@ -50,11 +50,12 @@ class RelationDetector:
         }
 
     def _get_client(self) -> OpenAI:
-        """Lazy-init LLM client"""
+        """Lazy-init LLM client with timeout"""
         if self.client is None:
             self.client = OpenAI(
                 base_url=self.llm_url,
                 api_key="lm-studio",
+                timeout=120,
             )
         return self.client
 
@@ -83,14 +84,14 @@ class RelationDetector:
     ) -> List[Dict]:
         """
         Detect relations within a single cluster.
-        
+
         Args:
             cluster_id: Cluster identifier
             chunk_ids: List of chunk IDs in this cluster
             texts: List of chunk texts
             embeddings: List of embedding vectors
             metadatas: List of chunk metadata dicts
-            
+
         Returns:
             List of relation dicts
         """
@@ -191,49 +192,54 @@ class RelationDetector:
         chunk_b_id: str,
         text_b: str,
         meta_b: Dict,
+        max_retries: int = 2,
     ) -> Optional[Dict]:
-        """Analyze a single pair of chunks with LLM"""
-        try:
-            prompt = self._build_prompt(text_a, meta_a, text_b, meta_b)
+        """Analyze a single pair of chunks with LLM, with retry on failure"""
+        for attempt in range(max_retries):
+            try:
+                prompt = self._build_prompt(text_a, meta_a, text_b, meta_b)
 
-            client = self._get_client()
-            response = client.chat.completions.create(
-                model=self.llm_model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=300,
-            )
+                client = self._get_client()
+                response = client.chat.completions.create(
+                    model=self.llm_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.3,
+                    max_tokens=300,
+                )
 
-            self.stats["llm_calls"] += 1
+                self.stats["llm_calls"] += 1
 
-            response_text = response.choices[0].message.content.strip()
+                response_text = response.choices[0].message.content.strip()
 
-            # Clean markdown fences if present
-            if response_text.startswith("```"):
-                parts = response_text.split("```")
-                if len(parts) >= 2:
-                    response_text = parts[1]
-                    if response_text.startswith("json"):
-                        response_text = response_text[4:]
+                # Clean markdown fences if present
+                if response_text.startswith("```"):
+                    parts = response_text.split("```")
+                    if len(parts) >= 2:
+                        response_text = parts[1]
+                        if response_text.startswith("json"):
+                            response_text = response_text[4:]
 
-            # Try to extract JSON from response
-            # Sometimes LLM adds text before/after JSON
-            json_start = response_text.find("{")
-            json_end = response_text.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                response_text = response_text[json_start:json_end]
+                # Try to extract JSON from response
+                json_start = response_text.find("{")
+                json_end = response_text.rfind("}") + 1
+                if json_start >= 0 and json_end > json_start:
+                    response_text = response_text[json_start:json_end]
 
-            result = json.loads(response_text)
-            return result
+                result = json.loads(response_text)
+                return result
 
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON parse error for pair {chunk_a_id}/{chunk_b_id}: {e}")
-            self.stats["errors"] += 1
-            return None
-        except Exception as e:
-            logger.error(f"LLM error for pair {chunk_a_id}/{chunk_b_id}: {e}")
-            self.stats["errors"] += 1
-            return None
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON parse error for pair {chunk_a_id}/{chunk_b_id}: {e}")
+                self.stats["errors"] += 1
+                return None
+            except Exception as e:
+                logger.warning(f"LLM error (attempt {attempt+1}/{max_retries}) for pair {chunk_a_id}/{chunk_b_id}: {e}")
+                self.stats["errors"] += 1
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                    self.client = None  # Force reconnect
+                    continue
+                return None
 
     def _build_prompt(
         self,

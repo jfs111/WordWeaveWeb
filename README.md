@@ -21,14 +21,15 @@ The system ingests PDF documents, extracts and chunks text, generates embeddings
 8. [Interface Web](#interface-web)
 9. [API Documentation](#api-documentation)
 10. [Models & Algorithms](#models--algorithms)
-11. [Database](#database)
-12. [Challenges Encountered](#challenges-encountered)
-13. [Future Improvements](#future-improvements)
-14. [Rebuild & Maintenance](#rebuild--maintenance)
-15. [Troubleshooting](#troubleshooting)
-16. [Acknowledgements](#acknowledgements)
-17. [License](#license)
-18. [Contact](#contact)
+11. [Benchmarks](#benchmarks)
+12. [Database](#database)
+13. [Challenges Encountered](#challenges-encountered)
+14. [Future Improvements](#future-improvements)
+15. [Rebuild & Maintenance](#rebuild--maintenance)
+16. [Troubleshooting](#troubleshooting)
+17. [Acknowledgements](#acknowledgements)
+18. [License](#license)
+19. [Contact](#contact)
 
 ---
 
@@ -46,7 +47,7 @@ The system is fully multi-tenant: each user can create multiple projects, each w
 
 **Document Ingestion Pipeline:**
 - PDF upload with automatic text extraction (PyPDF2).
-- Intelligent text chunking with configurable size (1500 chars) and overlap (200 chars).
+- Intelligent word-based text chunking with configurable size and overlap (default: 200 words / 50 words overlap, with fallback for short documents). Minimum chunk threshold: 10 words.
 - Embedding generation using `paraphrase-multilingual-MiniLM-L12-v2` (384 dimensions, 50+ languages).
 - Storage in Qdrant with per-project collection isolation (`proj_{project_id}`).
 - PostgreSQL metadata tracking (documents, chunks, pages, word counts).
@@ -65,8 +66,7 @@ The system is fully multi-tenant: each user can create multiple projects, each w
 
 **Semantic Search:**
 - Vector similarity search via Qdrant.
-- Graph enrichment: search results are augmented with related chunks discovered through Auto-Hop budget-based graph traversal (best-first, cosine similarity cost model).
-
+- Graph enrichment: search results are augmented with related chunks discovered through Auto-Hop budget-based graph traversal (best-first, cosine similarity cost model). Benchmarked: +100% to +170% context chunks, +12% to +26% source relevance scores.
 **Chat Graph-RAG:**
 - Natural language question answering over the document corpus.
 - Full pipeline: question → embed → search → graph enrichment → LLM generation → sourced answer.
@@ -96,7 +96,7 @@ The system is fully multi-tenant: each user can create multiple projects, each w
 **External REST API (for agents):**
 - 10 endpoints with API key authentication (`X-API-Key`).
 - Chat endpoint with customizable system prompt for agent integration.
-- Auto-Hop graph traversal (budget-based best-first) with legacy BFS fallback for programmatic knowledge exploration.
+- Auto-Hop graph traversal (budget-based best-first) with legacy BFS fallback for programmatic knowledge exploration. Benchmarked on two corpora (274 enterprise PDFs + 4 GDPR PDFs), Auto-Hop consistently improved retrieval: +125% domain coverage on cross-cutting questions, +50% sanction types discovered, and one critical procedure (PED) found exclusively through graph traversal. See `examples/benchmarks/` for full results.
 - Cluster listing, graph data export, chunk retrieval.
 - Compatible with LangChain, LlamaIndex, or any HTTP-based agent framework.
 
@@ -199,6 +199,13 @@ WordWeaveWeb/
 │           ├── register.html                   # Registration page
 │           ├── dashboard.html                  # Project dashboard
 │           └── project.html                    # Main project interface (stepper, graph D3.js)
+├── examples/
+│   ├── README.md                               # Corpora & benchmarks overview
+│   ├── corpus_novatech/                        # 274 enterprise PDFs (NovaTech Solutions)
+│   ├── corpus_rgpd/                            # 4 GDPR regulatory PDFs
+│   └── benchmarks/
+│       ├── novatech/BENCHMARK.md               # 5-question benchmark with full results
+│       └── rgpd/BENCHMARK.md                   # 3-question benchmark with full results
 ├── STARTUP.md                                  # Post-reboot startup guide
 ├── REBUILD_ALL.md                              # Rebuild & maintenance guide
 ├── TROUBLESHOOTING.md                          # Troubleshooting guide
@@ -469,9 +476,77 @@ Instead of a fixed number of hops, the Auto-Hop algorithm uses a **budget-based 
 - **Safety**: hard `max_hops` limit (default 10) prevents runaway traversal.
 - **Dual mode**: The API supports both `"auto"` (budget-based) and `"fixed"` (legacy BFS) modes.
 
-Typical behavior on the RNCP corpus (263 PDFs, 3,499 relations): 3-4 hops per starting chunk, budget consumption of 0.75-0.95, traversing COMPLEMENTAIRE, SIMILAIRE, APPLICATION, TRANSVERSAL, and PREREQUIS relations. The Chat RAG pipeline runs Auto-Hop from each vector search result, typically producing 7 vector + 15 graph = 22 context chunks.
+Typical behavior on the NovaTech corpus (274 PDFs, 2,406 relations): 3-8 hops per starting chunk (up to 10 on high-similarity document series), budget consumption of 0.73-0.88, traversing all 9 relation types with COMPLEMENTAIRE and SIMILAIRE dominant. The Chat RAG pipeline runs Auto-Hop from each vector search result, typically producing 4-8 vector + 17-20 graph = 20-27 context chunks. On the RNCP corpus (263 PDFs, 3,499 relations): 3-4 hops, 7 vector + 15 graph = 22 chunks.
 
 ---
+
+## Benchmarks
+
+Two corpora were tested to evaluate the impact of Graph-RAG Auto-Hop versus classical vector-only RAG. Each question was asked twice — once without graph enrichment (vector search only), once with Auto-Hop enabled — and the results were compared on coverage, source quality, and response depth.
+
+Full benchmark details with per-question logs and Auto-Hop traversal traces are available in `examples/benchmarks/`.
+
+### Corpus 1 — NovaTech Solutions (Enterprise Documentation)
+
+| Parameter | Value |
+|-----------|-------|
+| **Documents** | 274 PDFs (contracts, amendments, policies, CSE minutes, incident reports, job descriptions) |
+| **Chunks** | 395 |
+| **Clusters** | 32 |
+| **Relations** | 2,406 |
+| **LLM** | openai/gpt-oss-20b (local, LM Studio) |
+
+**5 questions** testing amendment chains (CDI → avenant → avenant), cross-domain references (HR → IT → Security → Legal), and document discovery:
+
+| # | Question | RAG Classic | Graph-RAG Auto-Hop | Key Gain |
+|---|----------|------------|-------------------|----------|
+| Q1 | Employee confidentiality obligations | 6 obligations, max 62% | 5 hierarchical levels with differentiated durations, max 82% | +IP obligations, +incident reporting, 2yr vs 5yr durations |
+| Q2 | Telework rules evolution | 5 steps, max 64% | 4 enriched steps, max 90% | +Contractual integration (AV-CDI-2024 art. 9) |
+| Q3 | Security incident procedure | 9 steps, max 68% | 7 steps + archiving, max 80% | +RCD archiving (5 years) |
+| Q4 | AI generative usage rules | 4 categories, max 73% | 3 categories, max 90% | +17% source scores, more relevant context |
+| Q5 | Right to erasure procedure | 6 generic steps, max 57% | 7 precise steps with §§ references, max 82% | **PED unfindable by vector search**, discovered via graph |
+
+**Q5 is the most demonstrative case:** vector search scored only 49-57% (wrong documents returned), while Auto-Hop followed COMPLEMENTAIRE and TRANSVERSAL relations to discover the Rights Exercise Procedure (PED) — producing a precise 7-step procedure with DPO email, 48h acknowledgment, CNIL identity verification, and CCT/PTR references.
+
+### Corpus 2 — RGPD Regulatory Documents
+
+| Parameter | Value |
+|-----------|-------|
+| **Documents** | 4 PDFs (GDPR obligations, personal data rights, EU AI Act) |
+| **Chunks** | 415 |
+| **Clusters** | 24 |
+| **Relations** | 2,390 |
+
+**3 questions** testing Graph-RAG on a homogeneous regulatory corpus:
+
+| # | Question | RAG Classic | Graph-RAG Auto-Hop | Key Gain |
+|---|----------|------------|-------------------|----------|
+| Q1 | Minimum obligations for digital solutions | 4 domains | 9 domains | **+125% coverage** (+transparency, rights, responsibility, subcontracting, incidents) |
+| Q2 | Data subject rights | 8 rights | 9 rights | +consent withdrawal, enriched practical details |
+| Q3 | GDPR non-compliance sanctions | 4 sanction types | 6 sanction types | +50% types, TRANSVERSAL relations dominant |
+
+### Key Findings
+
+1. **Graph-RAG improves all question types**, from +12% (focused questions) to +125% (cross-cutting questions) in coverage.
+
+2. **The gain is proportional to question complexity:**
+   - Cross-cutting questions (Q1 RGPD, Q1/Q5 NovaTech): major gains — new documents discovered
+   - Amendment chain questions (Q2 NovaTech): SUITE_LOGIQUE relations reconstruct contractual history
+   - Focused questions (Q2 RGPD, Q4 NovaTech): qualitative gains — higher source scores, richer details
+
+3. **Relation types match question semantics:**
+   - Confidentiality → SIMILAIRE (CDI series traversal)
+   - Telework → SUITE_LOGIQUE + APPLICATION (amendment chains)
+   - Security → COMPLEMENTAIRE (procedure chains)
+   - Rights → TRANSVERSAL (cross-document links)
+
+4. **Source similarity scores are systematically higher** with Graph-RAG (+12% to +26%), indicating more relevant context for the LLM even when thematic coverage is equivalent.
+
+5. **Auto-Hop budget of 1.0 is well calibrated:** average consumption 0.73-0.88, with traversals reaching 10 hops on high-similarity document series (CDI contracts: 0.97-0.99 similarity) while stopping at 3-4 hops on weaker connections.
+
+6. **Limitation identified:** Graph-RAG starts from vector search results. If vector search misses a document entirely (RGPD Q3: sanctions in `vosdroits` not found), the graph cannot compensate. A future **hierarchical super-index** (1 embedding per document for document-level pre-filtering) would address this.
+
+> **Reproduce these results:** Upload the corpora from `examples/corpus_novatech/` and `examples/corpus_rgpd/`, run the full pipeline, and test the questions listed in the benchmark files.
 
 ## Database
 
@@ -501,7 +576,7 @@ Typical behavior on the RNCP corpus (263 PDFs, 3,499 relations): 3-4 hops per st
 ## Challenges Encountered
 
 ### 1. Validating the Graph-RAG Concept
-The initial question was whether LLM-detected relations would actually improve retrieval quality over pure vector search. A proof of concept using the RNCP corpus compared standard RAG (top-5 vector search) with Graph-RAG (top-5 + Auto-Hop graph neighbors). The graph-enriched approach consistently surfaced relevant context that vector search alone missed, particularly for questions spanning multiple topics. With the Auto-Hop algorithm (budget-based best-first traversal using cosine similarity as cost), the system adaptively explores 2-5 hops deep when relations are strong, while stopping early on weak connections — producing richer context without noise. This validated the core architecture.
+The initial question was whether LLM-detected relations would actually improve retrieval quality over pure vector search. A proof of concept using the RNCP corpus compared standard RAG (top-5 vector search) with Graph-RAG (top-5 + Auto-Hop graph neighbors). The graph-enriched approach consistently surfaced relevant context that vector search alone missed, particularly for questions spanning multiple topics. With the Auto-Hop algorithm (budget-based best-first traversal using cosine similarity as cost), the system adaptively explores 2-5 hops deep when relations are strong, while stopping early on weak connections — producing richer context without noise. This validated the core architecture. This was later confirmed by formal benchmarks on two additional corpora (NovaTech enterprise docs and RGPD regulatory PDFs), where Graph-RAG with Auto-Hop consistently outperformed classical RAG across all 8 test questions — see the Benchmarks section below.
 
 ### 2. Scaling LLM Relation Detection
 With 1,205 chunks, naive pairwise comparison would require ~725,000 LLM calls — completely impractical. The solution was to first cluster chunks into thematic groups, only compare within clusters, use embedding similarity as a pre-filter (cosine ≥ 0.6), and implement incremental commits. This reduced LLM calls from ~725K to ~4,500 while maintaining coverage of meaningful relations.
