@@ -1,4 +1,5 @@
 # ✦🕸️ Word Weave Web
+![Unit Tests](https://github.com/jfs111/WordWeaveWeb/actions/workflows/tests.yml/badge.svg)
 
 **Video Demo:** *(coming soon)*
 
