@@ -18,18 +18,19 @@ The system ingests PDF documents, extracts and chunks text, generates embeddings
 5. [Design Decisions](#design-decisions)
 6. [Technologies Used](#technologies-used)
 7. [How to Run](#how-to-run)
-8. [Interface Web](#interface-web)
-9. [API Documentation](#api-documentation)
-10. [Models & Algorithms](#models--algorithms)
-11. [Benchmarks](#benchmarks)
-12. [Database](#database)
-13. [Challenges Encountered](#challenges-encountered)
-14. [Future Improvements](#future-improvements)
-15. [Rebuild & Maintenance](#rebuild--maintenance)
-16. [Troubleshooting](#troubleshooting)
-17. [Acknowledgements](#acknowledgements)
-18. [License](#license)
-19. [Contact](#contact)
+8. [Unit Tests](#unit-tests)
+9. [Interface Web](#interface-web)
+10. [API Documentation](#api-documentation)
+11. [Models & Algorithms](#models--algorithms)
+12. [Benchmarks](#benchmarks)
+13. [Database](#database)
+14. [Challenges Encountered](#challenges-encountered)
+15. [Future Improvements](#future-improvements)
+16. [Rebuild & Maintenance](#rebuild--maintenance)
+17. [Troubleshooting](#troubleshooting)
+18. [Acknowledgements](#acknowledgements)
+19. [License](#license)
+20. [Contact](#contact)
 
 ---
 
@@ -67,6 +68,7 @@ The system is fully multi-tenant: each user can create multiple projects, each w
 **Semantic Search:**
 - Vector similarity search via Qdrant.
 - Graph enrichment: search results are augmented with related chunks discovered through Auto-Hop budget-based graph traversal (best-first, cosine similarity cost model). Benchmarked: +100% to +170% context chunks, +12% to +26% source relevance scores.
+
 **Chat Graph-RAG:**
 - Natural language question answering over the document corpus.
 - Full pipeline: question → embed → search → graph enrichment → LLM generation → sourced answer.
@@ -199,6 +201,20 @@ WordWeaveWeb/
 │           ├── register.html                   # Registration page
 │           ├── dashboard.html                  # Project dashboard
 │           └── project.html                    # Main project interface (stepper, graph D3.js)
+├── tests/                                      # Unit test suite (115 tests)
+│   ├── conftest.py                             # Shared fixtures (mocks, async DB session)
+│   ├── service_b/app/services/
+│   │   ├── test_chunker.py                     # 31 tests — TextChunker
+│   │   ├── test_clusterer.py                   # 23 tests — ClusteringService
+│   │   └── test_relation_detector.py           # 26 tests — RelationDetector (LLM mocked)
+│   ├── service_c/app/services/
+│   │   └── test_auth_service.py                # 24 tests — bcrypt + JWT
+│   └── shared/utils/
+│       └── test_auto_hop.py                    # 16 tests — Auto-Hop traversal (DB mocked)
+├── pytest.ini                                  # pytest configuration
+├── requirements-test.txt                       # Test dependencies
+├── run_tests.ps1                               # Test runner — Windows (PowerShell)
+├── run_tests.sh                                # Test runner — Linux / macOS
 ├── examples/
 │   ├── README.md                               # Corpora & benchmarks overview
 │   ├── corpus_novatech/                        # 274 enterprise PDFs (NovaTech Solutions)
@@ -290,7 +306,7 @@ Server-side HTML rendering with **Jinja2** templates, client-side Markdown rende
 
 **1. Clone the repository:**
 ```bash
-git clone https://github.com/jfs-111/WordWeaveWeb.git
+git clone https://github.com/jfs111/WordWeaveWeb.git
 cd WordWeaveWeb
 ```
 
@@ -347,6 +363,85 @@ This starts 6 containers:
 
 The LLM is used by **Service B** (relation detection) and **Service C** (Chat RAG, document analysis).
 To change the model, edit `docker-compose.yml` then `docker-compose up -d` (no rebuild needed).
+
+---
+
+## Unit Tests
+
+The project includes a suite of **115 unit tests** covering the core business logic of all three services. Tests run entirely without Docker — no database, no LLM, no Qdrant required. All external dependencies (PostgreSQL, OpenAI client) are mocked.
+
+### Prerequisites
+
+- **Python 3.10+** — [download here](https://www.python.org/downloads/) — check **"Add Python to PATH"** during installation
+- No other prerequisites: the test runner creates and configures its own isolated virtual environment automatically
+
+### Running the Tests
+
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_tests.ps1
+```
+
+> If your system blocks `.ps1` scripts by default (common on freshly installed Windows), the `-ExecutionPolicy Bypass` flag overrides this restriction for the duration of this single command — no system-wide setting is changed.
+
+**Linux / macOS:**
+```bash
+bash run_tests.sh
+```
+
+Both scripts automatically create a `.venv-tests` virtual environment, install all test dependencies from `requirements-test.txt`, and launch pytest.
+
+### Expected Output
+
+```
+collected 115 items
+
+tests/service_b/app/services/test_chunker.py ..............................  [ 27%]
+tests/service_b/app/services/test_clusterer.py .....................         [ 47%]
+tests/service_b/app/services/test_relation_detector.py ..................    [ 66%]
+tests/service_c/app/services/test_auth_service.py ........................   [ 87%]
+tests/shared/utils/test_auto_hop.py ................                         [100%]
+
+115 passed in ~15s
+```
+
+### Test Structure
+
+Tests are organized as a mirror of the source tree, one test file per service module:
+
+| Test file | Source module | Tests | What is covered |
+|-----------|--------------|-------|-----------------|
+| `test_chunker.py` | `service_b/.../chunker.py` | 31 | Initialization, short/long/empty text, overlap, positions, metadata, edge cases |
+| `test_clusterer.py` | `service_b/.../clusterer.py` | 23 | Result schema, forced-K, auto-K, degenerate inputs (<3 samples), unknown method |
+| `test_relation_detector.py` | `service_b/.../relation_detector.py` | 26 | Stats, cosine pre-filter, relation validation (type/intensity/confidence), LLM mocked |
+| `test_auth_service.py` | `service_c/.../auth_service.py` | 24 | bcrypt hash/verify, JWT create/decode/expiry/tampering, API key generation |
+| `test_auto_hop.py` | `shared/utils/auto_hop.py` | 16 | No-relation stop, budget exhaustion, max_hops, visited set, similarity threshold, HopResult fields |
+
+### Running a Specific Test File
+
+Once the virtual environment is active (`.venv-tests\Scripts\activate.bat` on Windows or `source .venv-tests/bin/activate` on Linux/macOS), you can target a single file or test class:
+
+```bash
+# Run only the chunker tests
+python -m pytest tests/service_b/app/services/test_chunker.py -v
+
+# Run only a specific class
+python -m pytest tests/service_c/app/services/test_auth_service.py::TestDecodeToken -v
+
+# Run with detailed failure output
+python -m pytest tests/ -v --tb=long
+```
+
+### Known Behaviors Documented by Tests
+
+Two edge cases in the source code are explicitly documented through failing-by-design tests:
+
+- **`TextChunker`** — passing `chunk_overlap >= chunk_size` raises a `ValueError` (step becomes zero in `range()`). This is expected behavior: the chunker does not silently ignore an invalid configuration.
+- **`hash_password`** — passwords longer than 72 bytes raise a `ValueError`. This is a bcrypt library limitation; the test `test_password_over_72_bytes_raises` documents it so contributors are aware.
+
+### Notes on Warnings
+
+Running the auth tests produces JWT `InsecureKeyLengthWarning` messages. These are expected: the test suite uses a short dummy secret (`"change-me-in-production"`). They do not affect test results. In production, set `JWT_SECRET` to a value of at least 32 characters in your `.env` file.
 
 ---
 
@@ -548,6 +643,8 @@ Full benchmark details with per-question logs and Auto-Hop traversal traces are 
 
 > **Reproduce these results:** Upload the corpora from `examples/corpus_novatech/` and `examples/corpus_rgpd/`, run the full pipeline, and test the questions listed in the benchmark files.
 
+---
+
 ## Database
 
 ### PostgreSQL Tables
@@ -682,7 +779,7 @@ Copyright (c) 2025 Jean-François SWISTAK
 ## Contact
 
 - **Author:** Jean-François SWISTAK
-- **GitHub:** [jfs-111](https://github.com/jfs-111)
+- **GitHub:** [jfs111](https://github.com/jfs111)
 - **Email:** jf_swistak@yahoo.fr
 
 ---
