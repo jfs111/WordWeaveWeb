@@ -640,7 +640,7 @@ Full benchmark details with per-question logs and Auto-Hop traversal traces are 
 
 5. **Auto-Hop budget of 1.0 is well calibrated:** average consumption 0.73-0.88, with traversals reaching 10 hops on high-similarity document series (CDI contracts: 0.97-0.99 similarity) while stopping at 3-4 hops on weaker connections.
 
-6. **Limitation identified:** Graph-RAG starts from vector search results. If vector search misses a document entirely (RGPD Q3: sanctions in `vosdroits` not found), the graph cannot compensate. A future **hierarchical super-index** (1 embedding per document for document-level pre-filtering) would address this.
+6. **Limitation identified:** Graph-RAG starts from vector search results. If vector search misses a document entirely (RGPD Q3: sanctions in `vosdroits` not found), the graph cannot compensate.
 
 > **Reproduce these results:** Upload the corpora from `examples/corpus_novatech/` and `examples/corpus_rgpd/`, run the full pipeline, and test the questions listed in the benchmark files.
 
@@ -699,7 +699,6 @@ Claude AI assisted in generating significant portions of the codebase. However, 
 - **GPU Acceleration:** Deploy Service B with NVIDIA Container Toolkit for faster embedding generation and larger local LLMs.
 - **Streaming Chat (SSE):** Server-Sent Events for real-time token streaming.
 - **Auto-Hop Visualization:** Interactive path explorer highlighting Auto-Hop traversal paths in the D3.js graph (budget consumption, hop cost per edge).
-- **Vector-Based Relation Qualification:** Replace LLM-based pairwise relation detection with vector operations and clustering on embedding differences, using the LLM only for sampling-based cluster label qualification. This would dramatically reduce LLM calls while maintaining relation quality.
 - **Graph Export Formats:** GraphML, GEXF, and JSON-LD export for integration with Neo4j, Gephi, NetworkX.
 - **Advanced Clustering:** Hierarchical clustering and LLM-generated cluster topic labels.
 - **Prometheus + Grafana:** Observability with metrics dashboards for pipeline performance and LLM latency.
