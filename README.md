@@ -1,7 +1,7 @@
 # ✦🕸️ Word Weave Web
 ![Unit Tests](https://github.com/jfs111/WordWeaveWeb/actions/workflows/tests.yml/badge.svg)
 
-**Video Demo:** *(coming soon)*
+**Video Demo:** https://www.youtube.com/watch?v=g6NmxH5aZ3Q
 
 **Description:**
 Word Weave Web is a multi-tenant document intelligence platform that transforms unstructured PDF collections into navigable knowledge graphs. It combines semantic search (RAG) with graph-based relation detection to enable deep exploration of document corpora through natural language queries.
